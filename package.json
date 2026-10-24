@@ -1,0 +1,27 @@
+{
+  "name": "glacion-kingdom",
+  "version": "0.1.0",
+  "description": "Kingdom of Glacion — open-world fantasy RPG (browser, Three.js)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "test": "node tests/smoke.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lhc6835-hue/Glacion-kingdom.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lhc6835-hue/Glacion-kingdom/issues"
+  },
+  "homepage": "https://github.com/lhc6835-hue/Glacion-kingdom#readme",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  },
+  "private": true,
+  "type": "module"
+}
