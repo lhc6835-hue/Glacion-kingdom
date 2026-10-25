@@ -93,6 +93,8 @@ export class Post {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.55, 0.82);
     this.composer.addPass(this.bloom);
     this.light = new ShaderPass(LightShader);
+    // ShaderPass clones its uniforms; re-link the shared ones so time of day reaches this pass.
+    for (const k of ['uKey', 'uKeyStrength', 'uNight', 'uTime']) this.light.uniforms[k] = look[k];
     this.composer.addPass(this.light);
     this.composer.addPass(new OutputPass());
     this.resize(size.x, size.y);
