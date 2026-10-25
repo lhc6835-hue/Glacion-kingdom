@@ -7,6 +7,10 @@
 - 보이는 곳은 실제로 갈 수 있습니다. 햇살 언덕에서 출발해 호숫가를 돌아 왕의 길 오르막을 지나 남문으로 들어가면 왕도가 나옵니다
 - 높은 곳에서 뛰어내려 Space를 누르고 있으면 활공합니다. 절벽 위 왕성 정문에서 호수까지 날아갈 수 있습니다
 
+## 바로 플레이
+
+https://claude.ai/artifact/HbAws2RsybsvAumu3yPk3n (claude.ai 아티팩트. `node tools/artifact.mjs out.html`로 단일 페이지를 만들어 다시 올린다)
+
 ## 실행
 
 ```bash
