@@ -70,7 +70,9 @@ const LightShader = {
       col = mix(col, col * mix(vec3(1.0), uKey, 0.35) * 1.04, smoothstep(0.5, 1.0, L) * 0.4 * (1.0 - uNight * 0.5));
       // Keep the paint vivid: a little saturation and contrast back after the light layers.
       float L2 = lum(col);
-      col = mix(vec3(L2), col, 1.16);
+      col = mix(vec3(L2), col, 1.16 - uNight * 0.42);
+      // Moonlit nights: colours drain toward silver-blue, as the eye sees them in the dark.
+      col = mix(col, L2 * vec3(0.62, 0.74, 1.08), uNight * 0.3);
       col = (col - 0.5) * 1.07 + 0.5;
       col = max(col, 0.0);
       // Gentle storybook vignette.
