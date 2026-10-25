@@ -57,7 +57,7 @@ const LightShader = {
       beams *= 0.6 + 0.4 * sin(ang * 91.0 - uTime * 0.04);
       float fall = exp(-dist * 1.15);
       float nightSoft = 1.0 - uNight * 0.45;
-      vec3 rays = uKey * (acc * 1.35 * (0.55 + 0.45 * beams) + beams * fall * 0.07) * uKeyStrength * nightSoft;
+      vec3 rays = uKey * (acc * 1.0 * (0.55 + 0.45 * beams) + beams * fall * 0.07) * uKeyStrength * nightSoft;
       col = 1.0 - (1.0 - col) * (1.0 - clamp(rays, 0.0, 1.0)); // screen blend
 
       // Warm wash spreading from the light's corner; cooler toward the far corner.
