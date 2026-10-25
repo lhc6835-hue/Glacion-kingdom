@@ -55,18 +55,24 @@ const LightShader = {
       float beams = 0.55 + 0.45 * sin(ang * 38.0 + sin(ang * 13.0 + uTime * 0.05) * 2.0 + uTime * 0.03);
       beams *= 0.6 + 0.4 * sin(ang * 91.0 - uTime * 0.04);
       float fall = exp(-dist * 1.15);
-      vec3 rays = uKey * (acc * 1.7 * (0.55 + 0.45 * beams) + beams * fall * 0.10) * uKeyStrength;
+      float nightSoft = 1.0 - uNight * 0.45;
+      vec3 rays = uKey * (acc * 1.35 * (0.55 + 0.45 * beams) + beams * fall * 0.07) * uKeyStrength * nightSoft;
       col = 1.0 - (1.0 - col) * (1.0 - clamp(rays, 0.0, 1.0)); // screen blend
 
       // Warm wash spreading from the light's corner; cooler toward the far corner.
       float wash = exp(-dist * 1.6) * uKeyStrength;
-      col *= mix(vec3(1.0), uKey * 1.12, wash * 0.45);
+      col *= mix(vec3(1.0), uKey * 1.12, wash * 0.38);
       col = mix(col, col * vec3(0.90, 0.95, 1.08), smoothstep(0.6, 1.5, dist) * 0.35);
 
       // Split toning: golden highlights, blue-violet shadows.
       float L = lum(col);
       col = mix(col, col * vec3(0.86, 0.92, 1.12), (1.0 - smoothstep(0.0, 0.45, L)) * 0.35);
       col = mix(col, col * mix(vec3(1.0), uKey, 0.35) * 1.04, smoothstep(0.5, 1.0, L) * 0.4 * (1.0 - uNight * 0.5));
+      // Keep the paint vivid: a little saturation and contrast back after the light layers.
+      float L2 = lum(col);
+      col = mix(vec3(L2), col, 1.16);
+      col = (col - 0.5) * 1.07 + 0.5;
+      col = max(col, 0.0);
       // Gentle storybook vignette.
       vec2 vq = vUv - 0.5;
       col *= 1.0 - dot(vq * vec2(0.9, 1.1), vq * vec2(0.9, 1.1)) * 0.38;
