@@ -235,7 +235,7 @@ function paintSign(ctx, x, y, ppm, icon) {
 
 // --- castle pieces --------------------------------------------------------------------
 
-export function paintTower(seed, { ppm = 14, radius = 4, height = 22, roof = ROOFS.red, roofH = null, stone = STONE.pale, windows = 3, spire = true, banner = null, corbels = true } = {}) {
+export function paintTower(seed, { ppm = 14, radius = 4, height = 22, roof = ROOFS.red, roofH = null, stone = STONE.pale, windows = 3, spire = true, banner = null, corbels = true, ruined = false } = {}) {
   const r = rng(seed);
   const rh = roofH ?? radius * r.range(2.0, 2.8);
   const W = radius * 2 * ppm * 1.25, bodyW = radius * 2 * ppm;
@@ -258,6 +258,18 @@ export function paintTower(seed, { ppm = 14, radius = 4, height = 22, roof = ROO
     return [bx + rr() * bodyW * 0.6, y];
   }, (p, rr) => rgb(mix([0.2, 0.42, 0.22], [0.45, 0.66, 0.3], rr()), 0.9), { size: [ppm * 0.12, ppm * 0.25] });
   cylinderShade(ctx, bx, top, bodyW, height * ppm);
+  if (ruined) {
+    // Broken crown: bite a jagged notch out of the top and let ivy take over.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.moveTo(bx - 2, top - 2);
+    for (let k = 0; k <= 8; k++) ctx.lineTo(bx + (k / 8) * bodyW, top + r.range(0.5, 5) * ppm * (k % 2 ? 1 : 0.4) * (0.4 + Math.sin((k / 8) * Math.PI)));
+    ctx.lineTo(bx + bodyW + 2, top - 2); ctx.closePath(); ctx.fill();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = 'rgba(40,50,40,0.18)'; ctx.fillRect(0, 0, W, H);
+    dabs(ctx, r, Math.floor(height * 8), (rr) => [bx + rr() * bodyW, top + rr() ** 1.5 * height * ppm], (p, rr) => rgb(mix([0.2, 0.42, 0.22], [0.45, 0.66, 0.3], rr()), 0.9), { size: [ppm * 0.12, ppm * 0.28] });
+    ctx.globalCompositeOperation = 'source-over';
+    return { img: c, windows: [], ppm };
+  }
   // Corbelled parapet ring.
   if (corbels) {
     const ry = top - ppm * 0.2;
@@ -428,6 +440,131 @@ export function paintBridgeSpan(seed, { ppm = 14, span = 14, drop = 44, deckH = 
   dabs(ctx, r, 40, (rr) => [rr() < 0.5 ? rr() * pierW : W - rr() * pierW, H - rr() ** 2 * H * 0.5], (p, rr) => rgb(mix([0.22, 0.42, 0.22], [0.42, 0.62, 0.3], rr())), { size: [ppm * 0.15, ppm * 0.3] });
   ctx.globalCompositeOperation = 'source-over';
   return { img: c, windows: [], ppm };
+}
+
+// --- props -------------------------------------------------------------------------------
+
+export function paintFountain(seed, { ppm = 16 } = {}) {
+  const r = rng(seed);
+  const W = 12 * ppm, H = 7 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  const stone = STONE.pale;
+  // Basin: an ellipse seen from above with a stone rim.
+  ctx.fillStyle = rgb(shade(stone, 0.7)); ctx.beginPath(); ctx.ellipse(W / 2, H - 1.6 * ppm, W * 0.47, 1.5 * ppm, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rgb([0.36, 0.70, 0.78]); ctx.beginPath(); ctx.ellipse(W / 2, H - 1.75 * ppm, W * 0.42, 1.15 * ppm, 0, 0, Math.PI * 2); ctx.fill();
+  dabs(ctx, r, 40, (rr) => [W / 2 + (rr() - 0.5) * W * 0.8, H - 1.75 * ppm + (rr() - 0.5) * ppm * 1.6], () => 'rgba(255,255,255,0.5)', { size: [1.5, 3], stretch: 3, angle: 0 });
+  stoneWall(ctx, r, W * 0.03, H - 1.6 * ppm, W * 0.94, 1.6 * ppm, stone, ppm, { block: 0.8, course: 0.5 });
+  // Column and upper bowl with a statue of a bird taking flight.
+  stoneWall(ctx, r, W / 2 - 0.5 * ppm, H - 5 * ppm, ppm, 3.4 * ppm, stone, ppm, { block: 0.5, course: 0.4 });
+  ctx.fillStyle = rgb(stone); ctx.beginPath(); ctx.ellipse(W / 2, H - 4.8 * ppm, 2.2 * ppm, 0.55 * ppm, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rgb(shade(stone, 1.1));
+  ctx.beginPath(); ctx.ellipse(W / 2, H - 5.6 * ppm, 0.7 * ppm, 0.8 * ppm, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(W / 2 - 0.4 * ppm, H - 5.9 * ppm); ctx.quadraticCurveTo(W / 2 - 2.2 * ppm, H - 7 * ppm, W / 2 - 2.6 * ppm, H - 6 * ppm); ctx.lineTo(W / 2 - 0.5 * ppm, H - 5.5 * ppm); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(W / 2 + 0.4 * ppm, H - 5.9 * ppm); ctx.quadraticCurveTo(W / 2 + 2.2 * ppm, H - 7 * ppm, W / 2 + 2.6 * ppm, H - 6 * ppm); ctx.lineTo(W / 2 + 0.5 * ppm, H - 5.5 * ppm); ctx.fill();
+  // Falling water sheets.
+  ctx.fillStyle = 'rgba(200,235,250,0.75)';
+  for (const dx of [-1.9, 1.9]) { ctx.beginPath(); ctx.moveTo(W / 2 + dx * ppm * 0.95, H - 4.8 * ppm); ctx.quadraticCurveTo(W / 2 + dx * ppm * 1.6, H - 4 * ppm, W / 2 + dx * ppm * 1.8, H - 2 * ppm); ctx.lineTo(W / 2 + dx * ppm * 1.55, H - 2 * ppm); ctx.quadraticCurveTo(W / 2 + dx * ppm * 1.3, H - 4 * ppm, W / 2 + dx * ppm * 0.8, H - 4.8 * ppm); ctx.fill(); }
+  sideShade(ctx, 0, H - 7 * ppm, W, 7 * ppm, 0.2);
+  return { img: c, windows: [], ppm };
+}
+
+export function paintQuestBoard(seed, { ppm = 24 } = {}) {
+  const r = rng(seed);
+  const W = 4.6 * ppm, H = 3.6 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  const wood = [0.52, 0.36, 0.22];
+  ctx.fillStyle = rgb(shade(wood, 0.7)); ctx.fillRect(0.25 * ppm, 0.6 * ppm, 0.3 * ppm, H); ctx.fillRect(W - 0.55 * ppm, 0.6 * ppm, 0.3 * ppm, H);
+  ctx.fillStyle = rgb(wood); ctx.fillRect(0.1 * ppm, 0.8 * ppm, W - 0.2 * ppm, 2.0 * ppm);
+  for (let y = 0.8 * ppm; y < 2.8 * ppm; y += 0.4 * ppm) { ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0.1 * ppm, y, W - 0.2 * ppm, 1); }
+  // Little roof.
+  ctx.fillStyle = rgb(ROOFS.rust);
+  ctx.beginPath(); ctx.moveTo(-0.1 * ppm + 4, 0.85 * ppm); ctx.lineTo(W / 2, 0); ctx.lineTo(W + 0.1 * ppm - 4, 0.85 * ppm); ctx.closePath(); ctx.fill();
+  // Notices: weathered paper, some curled.
+  for (let i = 0; i < 9; i++) {
+    const pw = r.range(0.55, 0.85) * ppm, ph = r.range(0.5, 0.75) * ppm;
+    const px = r.range(0.25, W / ppm - 1.1) * ppm, py = r.range(0.95, 2.1) * ppm;
+    ctx.save(); ctx.translate(px + pw / 2, py + ph / 2); ctx.rotate(r.range(-0.15, 0.15));
+    ctx.fillStyle = rgb(mix([0.96, 0.92, 0.80], [0.86, 0.76, 0.56], r()));
+    ctx.fillRect(-pw / 2, -ph / 2, pw, ph);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.moveTo(pw / 2, ph / 2); ctx.lineTo(pw / 2 - 5, ph / 2); ctx.lineTo(pw / 2, ph / 2 - 5); ctx.fill();
+    for (let l = 0; l < 3; l++) { ctx.fillStyle = 'rgba(60,40,30,0.45)'; ctx.fillRect(-pw / 2 + 3, -ph / 2 + 4 + l * 4, pw * r.range(0.4, 0.8), 1.2); }
+    ctx.fillStyle = rgb([0.75, 0.2, 0.2]); ctx.beginPath(); ctx.arc(0, -ph / 2 + 2, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  return { img: c, windows: [], ppm };
+}
+
+export function paintStall(seed, { ppm = 20, color = [0.80, 0.30, 0.25], goods = 'fruit' } = {}) {
+  const r = rng(seed);
+  const W = 4.4 * ppm, H = 3.4 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  const wood = [0.55, 0.38, 0.24];
+  ctx.fillStyle = rgb(shade(wood, 0.7)); ctx.fillRect(0.3 * ppm, 0.9 * ppm, 0.18 * ppm, H); ctx.fillRect(W - 0.48 * ppm, 0.9 * ppm, 0.18 * ppm, H);
+  ctx.fillStyle = rgb(wood); ctx.fillRect(0.1 * ppm, H - 1.3 * ppm, W - 0.2 * ppm, 1.3 * ppm);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(0.1 * ppm, H - 0.5 * ppm, W - 0.2 * ppm, 0.5 * ppm);
+  const palettes = { fruit: [[0.9, 0.3, 0.25], [0.95, 0.7, 0.2], [0.5, 0.75, 0.3], [0.7, 0.3, 0.6]], bread: [[0.85, 0.62, 0.35], [0.75, 0.5, 0.28]], flowers: [[1, 0.6, 0.75], [1, 0.95, 0.9], [0.8, 0.6, 1], [1, 0.85, 0.3]], fish: [[0.7, 0.78, 0.85], [0.55, 0.65, 0.75]], cloth: [[0.3, 0.5, 0.7], [0.8, 0.3, 0.3], [0.9, 0.8, 0.4]] };
+  const pal = palettes[goods] || palettes.fruit;
+  for (let i = 0; i < 40; i++) blob(ctx, r.range(0.4, W / ppm - 0.4) * ppm, H - 1.35 * ppm - r.range(0, 0.35) * ppm, ppm * 0.16, ppm * 0.13, rgb(r.pick(pal)));
+  for (let k = 0; k < 6; k++) {
+    ctx.fillStyle = rgb(k % 2 ? color : [0.97, 0.95, 0.9]);
+    const ax = (k / 6) * W;
+    ctx.beginPath(); ctx.moveTo(ax, 0.3 * ppm); ctx.lineTo(ax + W / 6, 0.3 * ppm); ctx.lineTo(ax + W / 6, 1.0 * ppm); ctx.quadraticCurveTo(ax + W / 12, 1.3 * ppm, ax, 1.0 * ppm); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, 0.3 * ppm, W, 0.15 * ppm);
+  return { img: c, windows: [], ppm };
+}
+
+export function paintLamp(seed, { ppm = 24 } = {}) {
+  const W = 1 * ppm, H = 3.6 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  ctx.fillStyle = rgb([0.22, 0.22, 0.26]);
+  ctx.fillRect(W / 2 - 1.5, 0.7 * ppm, 3, H);
+  ctx.fillRect(W / 2 - 5, H - 4, 10, 4);
+  ctx.fillStyle = rgb([0.98, 0.85, 0.55]); ctx.fillRect(W / 2 - 0.25 * ppm, 0.2 * ppm, 0.5 * ppm, 0.6 * ppm);
+  ctx.strokeStyle = rgb([0.22, 0.22, 0.26]); ctx.lineWidth = 2; ctx.strokeRect(W / 2 - 0.25 * ppm, 0.2 * ppm, 0.5 * ppm, 0.6 * ppm);
+  ctx.beginPath(); ctx.moveTo(W / 2 - 0.35 * ppm, 0.22 * ppm); ctx.lineTo(W / 2, 0); ctx.lineTo(W / 2 + 0.35 * ppm, 0.22 * ppm); ctx.fill();
+  return { img: c, windows: [[W / 2 - 0.25 * ppm, 0.2 * ppm, 0.5 * ppm, 0.6 * ppm]], ppm };
+}
+
+export function paintBench(seed, { ppm = 24 } = {}) {
+  const W = 2.2 * ppm, H = 1.1 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  const wood = [0.58, 0.40, 0.26];
+  ctx.fillStyle = rgb(shade(wood, 0.6)); ctx.fillRect(3, H * 0.5, 3, H * 0.5); ctx.fillRect(W - 6, H * 0.5, 3, H * 0.5);
+  ctx.fillStyle = rgb(wood); ctx.fillRect(0, H * 0.45, W, H * 0.16); ctx.fillRect(0, H * 0.05, W, H * 0.14); ctx.fillRect(0, H * 0.25, W, H * 0.12);
+  return { img: c, windows: [], ppm };
+}
+
+export function paintDummy(seed, { ppm = 24 } = {}) {
+  const W = 1.4 * ppm, H = 2.2 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  ctx.fillStyle = rgb([0.45, 0.32, 0.2]); ctx.fillRect(W / 2 - 2, 0.6 * ppm, 4, H);
+  ctx.fillRect(2, 0.85 * ppm, W - 4, 3);
+  blob(ctx, W / 2, 1.2 * ppm, 0.35 * ppm, 0.5 * ppm, rgb([0.85, 0.72, 0.45]));
+  blob(ctx, W / 2, 0.45 * ppm, 0.28 * ppm, 0.28 * ppm, rgb([0.85, 0.72, 0.45]));
+  ctx.strokeStyle = rgb([0.75, 0.2, 0.2]); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2, 1.2 * ppm, 0.18 * ppm, 0, Math.PI * 2); ctx.stroke();
+  return { img: c, windows: [], ppm };
+}
+
+export function paintCrates(seed, { ppm = 24 } = {}) {
+  const r = rng(seed);
+  const W = 2.4 * ppm, H = 1.6 * ppm;
+  const c = canvas(W, H), ctx = c.getContext('2d');
+  const wood = [0.60, 0.44, 0.28];
+  const box = (x, y, s) => { ctx.fillStyle = rgb(shade(wood, r.range(0.85, 1.05))); ctx.fillRect(x, y, s, s); ctx.strokeStyle = rgb(shade(wood, 0.6)); ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, s - 2, s - 2); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s, y + s); ctx.stroke(); };
+  box(0, H - 0.9 * ppm, 0.9 * ppm); box(0.95 * ppm, H - 0.8 * ppm, 0.8 * ppm); box(0.3 * ppm, H - 1.6 * ppm, 0.7 * ppm);
+  ctx.fillStyle = rgb([0.5, 0.34, 0.22]); ctx.beginPath(); ctx.ellipse(W - 0.35 * ppm, H - 0.5 * ppm, 0.32 * ppm, 0.5 * ppm, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rgb([0.3, 0.3, 0.32]); ctx.fillRect(W - 0.67 * ppm, H - 0.75 * ppm, 0.64 * ppm, 2); ctx.fillRect(W - 0.67 * ppm, H - 0.3 * ppm, 0.64 * ppm, 2);
+  return { img: c, windows: [], ppm };
+}
+
+// Soft rectangle of warm light used for lit windows and lanterns at night.
+export function paintGlow() {
+  const c = canvas(64, 64), ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,214,140,1)'); g.addColorStop(0.35, 'rgba(255,180,90,0.55)'); g.addColorStop(1, 'rgba(255,150,60,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  return c;
 }
 
 export { hex };

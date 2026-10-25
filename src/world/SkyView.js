@@ -62,9 +62,9 @@ export class SkyView {
     const atlas = new Atlas(4096, 2);
     const ranges = [
       atlas.add(paintRange(11, { peaks: 11, jag: 0.5, snow: 0.72, base: [0.52, 0.62, 0.58], shadow: [0.36, 0.46, 0.48] })),
-      atlas.add(paintRange(12, { peaks: 8, jag: 0.6, snow: 0.55 })),
-      atlas.add(paintRange(13, { peaks: 6, jag: 0.65, snow: 0.45, base: [0.62, 0.68, 0.80], shadow: [0.44, 0.50, 0.68] })),
-      atlas.add(paintRange(14, { w: 1600, h: 800, peaks: 4, jag: 0.7, snow: 0.38, base: [0.68, 0.72, 0.84], shadow: [0.46, 0.52, 0.72] })),
+      atlas.add(paintRange(12, { peaks: 8, jag: 0.6, snow: 0.55, base: [0.48, 0.56, 0.70], shadow: [0.30, 0.36, 0.54] })),
+      atlas.add(paintRange(13, { peaks: 6, jag: 0.65, snow: 0.45, base: [0.56, 0.62, 0.78], shadow: [0.36, 0.42, 0.62] })),
+      atlas.add(paintRange(14, { w: 1600, h: 800, peaks: 4, jag: 0.7, snow: 0.38, base: [0.60, 0.66, 0.82], shadow: [0.38, 0.44, 0.66] })),
     ];
     const clouds = [];
     for (let i = 0; i < 6; i++) clouds.push(atlas.add(paintCloud(40 + i, { w: 900, h: 400 + (i % 3) * 40 })));

@@ -1,5 +1,5 @@
 import { Simplex2, hash2 } from './noise.js';
-import { CELL, N, HALF, LAKE } from './Layout.js';
+import { CELL, N, HALF, LAKE, START } from './Layout.js';
 import { F_NOTREE, F_WATER, F_ROAD, LEVEL_STEP } from './WorldData.js';
 import * as T from '../art/trees.js';
 
@@ -63,6 +63,7 @@ export function scatterNature(world, lib, layer, shadows, collision) {
     const nearWater = !(f & F_WATER) && (F[k + 1] & F_WATER || F[k - 1] & F_WATER || F[k + N] & F_WATER || F[k - N] & F_WATER);
 
     if (f & F_WATER) continue;
+    if (Math.hypot(x - START.x, z - START.z) < 7) continue; // keep the first view of the hero clear
     if (nearWater && r0 < 0.4) { addSmall('reeds', x, y, z, 0.25); continue; }
     if (f & F_NOTREE) {
       if (!(f & F_ROAD) && r1 < 0.05 && !(f & 4)) addSmall('tuft', x, y, z, 0.2);

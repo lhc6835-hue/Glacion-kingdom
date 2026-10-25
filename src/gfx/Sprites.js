@@ -5,6 +5,8 @@ import { look, glslCommon } from './Look.js';
 // camera, anchored at its base. Static layers are built once; dynamic layers rewrite their
 // instance buffers every frame (characters, birds, effects).
 
+export const playerUniform = { value: new THREE.Vector3(0, -999, 0) };
+
 const quad = (() => {
   const g = new THREE.PlaneGeometry(1, 1);
   g.translate(0, 0.5, 0);
@@ -13,7 +15,7 @@ const quad = (() => {
 
 function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
   return new THREE.ShaderMaterial({
-    uniforms: { ...look, uMap: { value: texture } },
+    uniforms: { ...look, uMap: { value: texture }, uPlayer: playerUniform },
     transparent: !cutout,
     depthWrite: cutout,
     alphaTest: cutout ? 0.5 : 0,
@@ -41,11 +43,18 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
     fragmentShader: /* glsl */`
       ${glslCommon}
       uniform sampler2D uMap;
+      uniform vec3 uPlayer;
       varying vec2 vUv;
       varying vec3 vP;
       varying vec2 vParam;
       void main(){
         vec4 t = texture2D(uMap, vUv);
+        ${cutout ? `// Anything standing between the camera and the player turns to a soft dither.
+        vec2 pd = vec2(vP.x - uPlayer.x, (vP.y - uPlayer.y - 0.7) * 0.7);
+        if (vP.z > uPlayer.z + 0.15 && length(pd) < 2.4 && vP.z < uPlayer.z + 30.0) {
+          vec2 g = mod(floor(gl_FragCoord.xy), 2.0);
+          if (g.x == g.y) discard;
+        }` : ''}
         ${cutout ? 'if (t.a < 0.5) discard;' : 'if (t.a < 0.003) discard;'}
         vec3 col = t.rgb / max(t.a, 1e-3);
         col *= vParam.y;
@@ -83,16 +92,16 @@ export class SpriteLayer {
   }
 
   // region: atlas region; ppm: pixels per metre of the painted sprite.
-  add(region, x, y, z, ppm, { sway = 0, emissive = 0, flip = 1, bright = 1, scale = 1 } = {}) {
+  add(region, x, y, z, ppm, o = {}) {
     if (this.count >= this.capacity) return -1;
     const i = this.count++;
-    this.set(i, region, x, y, z, ppm, { sway, emissive, flip, bright, scale });
+    this.set(i, region, x, y, z, ppm, o);
     return i;
   }
 
-  set(i, region, x, y, z, ppm, { sway = 0, emissive = 0, flip = 1, bright = 1, scale = 1 } = {}) {
+  set(i, region, x, y, z, ppm, { sway = 0, emissive = 0, flip = 1, bright = 1, scale = 1, wscale = 1 } = {}) {
     this.pos.setXYZ(i, x, y, z);
-    this.size.setXY(i, (region.w / ppm) * scale, (region.h / ppm) * scale);
+    this.size.setXY(i, (region.w / ppm) * scale * wscale, (region.h / ppm) * scale);
     this.uv.setXYZW(i, region.uv[0], region.uv[1], region.uv[2], region.uv[3]);
     this.param.setXYZW(i, sway, emissive, flip, bright);
   }
@@ -156,4 +165,22 @@ export class ShadowLayer {
   set(i, x, y, z, w, d, a) { this.data.setXYZW(i, x, y, z, a); this.dim.setXY(i, w, d); }
 
   commit() { this.geometry.instanceCount = this.count; this.data.needsUpdate = true; this.dim.needsUpdate = true; }
+}
+
+// Routes sprites to one SpriteLayer per atlas page.
+export class PagedSprites {
+  constructor(scene, textures, capacity, opts = {}) {
+    this.layers = textures.map((t) => {
+      const l = new SpriteLayer(t, capacity, opts);
+      scene.add(l.mesh);
+      return l;
+    });
+  }
+
+  add(region, x, y, z, ppm, o) {
+    const l = this.layers[region.page];
+    return { layer: l, i: l.add(region, x, y, z, ppm, o) };
+  }
+
+  commit() { for (const l of this.layers) l.commit(); }
 }

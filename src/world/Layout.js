@@ -12,7 +12,7 @@ export const HALF = (N * CELL) / 2; // 1024 m
 export const WATER = 0;
 export const CITY_H = 56;
 
-export const START = { x: -108, z: 462 };
+export const START = { x: 132, z: 446 };
 
 export const LAKE = { x: 20, z: 205, rx: 262, rz: 172 };
 
@@ -109,7 +109,7 @@ export const ROADS = [
 
 // Named places. Hidden places stay off the compass until discovered.
 export const PLACES = [
-  { id: 'sunmeadow', name: '햇살 언덕', sub: 'Sunmeadow Rise', x: -120, z: 520, r: 110 },
+  { id: 'sunmeadow', name: '햇살 언덕', sub: 'Sunmeadow Rise', x: 110, z: 500, r: 110 },
   { id: 'mirrorlake', name: '청옥 호수', sub: 'Mirrorlake', x: 20, z: 205, r: 220 },
   { id: 'crownfall', name: '왕관 폭포', sub: 'The Crownfall', x: 62, z: 40, r: 70 },
   { id: 'tierfalls', name: '계단 폭포', sub: 'Tierfalls', x: -300, z: 262, r: 70, hidden: true },

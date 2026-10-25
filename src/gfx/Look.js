@@ -44,6 +44,6 @@ vec3 srgb(vec3 c){ return pow(c, vec3(2.2)); }
 // Aerial perspective: distant things fade into the sky haze.
 vec3 haze(vec3 col, float dist){
   float t = smoothstep(uHazeNear, uHazeFar, dist);
-  return mix(col, uHaze, t * 0.85);
+  return mix(col, uHaze, t * 0.72);
 }
 `;
