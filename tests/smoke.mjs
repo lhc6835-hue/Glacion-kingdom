@@ -99,6 +99,12 @@ try {
   const night = await page.evaluate(() => { const g = window.__glacion; g.dayNight.setTime(23); g.update(1 / 30, g.engine.elapsed += 1 / 30); return { glow: window.__glacion.dayNight.time > 22 }; });
   check('night cycle runs', night.glow);
 
+  const sides = await page.evaluate(() => {
+    const g = window.__glacion;
+    return [g.people.layer.mesh.material.side, g.sprites.layers[0].mesh.material.side];
+  });
+  check('mirrored sprites render (east-facing hero, flipped trees)', sides.every((s) => s === 2), JSON.stringify(sides));
+
   check('no runtime errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   check('test harness', false, e.message);

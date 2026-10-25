@@ -21,6 +21,8 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
     alphaTest: cutout ? 0.5 : 0,
     alphaToCoverage: cutout,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    // Mirrored sprites (flip = -1) reverse the quad's winding, so both faces must draw.
+    side: THREE.DoubleSide,
     vertexShader: /* glsl */`
       attribute vec3 iPos;
       attribute vec2 iSize;

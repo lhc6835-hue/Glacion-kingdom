@@ -9,7 +9,8 @@
 
 ## 바로 플레이
 
-https://claude.ai/artifact/HbAws2RsybsvAumu3yPk3n (claude.ai 아티팩트. `node tools/artifact.mjs out.html`로 단일 페이지를 만들어 다시 올린다)
+- **GitHub Pages**: https://lhc6835-hue.github.io/Glacion-kingdom/ (`tools/deploy-pages.sh`로 배포)
+- claude.ai 아티팩트: https://claude.ai/artifact/HbAws2RsybsvAumu3yPk3n (`node tools/artifact.mjs out.html`로 단일 페이지 생성)
 
 ## 실행
 
