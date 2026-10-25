@@ -45,7 +45,8 @@ const LightShader = {
       for (int i = 0; i < STEPS; i++) {
         p += stepV;
         vec3 s = texture2D(tDiffuse, clamp(p, 0.001, 0.999)).rgb;
-        float b = smoothstep(0.62, 0.95, lum(s)) * step(0.35, p.y); // sky lives in the upper part
+        // Brightness relative to the light's own colour, so a rosy sunset sky still casts shafts.
+        float b = smoothstep(0.42, 0.85, lum(s) / max(lum(uKey), 0.35)) * step(0.35, p.y); // sky lives in the upper part
         acc += b * decay;
         decay *= 0.955;
       }
