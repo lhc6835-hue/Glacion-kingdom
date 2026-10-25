@@ -6,11 +6,9 @@ export class Engine {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     // ?lowres renders at reduced resolution (used by automated screenshot tests on software GL).
     this.params = new URLSearchParams(location.search);
-    this.renderer.setPixelRatio(this.params.has('lowres') ? 0.5 : Math.min(window.devicePixelRatio, 1.75));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.setPixelRatio(this.params.has('lowres') ? 0.5 : Math.min(window.devicePixelRatio, this.params.get('q') === 'low' ? 1 : 1.75));
+        // Painted colours are authored for display; keep tone mapping neutral.
+    this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();

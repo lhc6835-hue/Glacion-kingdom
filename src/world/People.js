@@ -69,6 +69,17 @@ export class People {
         lines: pickLines(LINES.any, 2), talkIndex: 0, visible: true,
       });
     }
+    // Townsfolk idling around the plaza.
+    const P = this.town.plaza;
+    for (let k = 0; k < 16; k++) {
+      const a = r() * Math.PI * 2, d = 0.45 + r() * 0.35;
+      const x = P.x + Math.cos(a) * P.rx * d, z = P.z + Math.sin(a) * P.rz * d;
+      this.npcs.push({
+        name: NAMES[nameI++ % NAMES.length], look: 'town' + Math.floor(r() * 18), role: 'resident',
+        home: { x, z }, x, z, y: this.world.groundHeight(x, z), facing: 0, frame: 0, anim: r() * 4, target: null, wait: r() * 5, speed: 1.2 + r() * 0.6,
+        lines: pickLines(LINES.any, 2), talkIndex: 0, visible: true,
+      });
+    }
     // Standing NPCs live in the static collision grid; walkers are pushed against the player directly.
     for (const n of this.npcs) {
       n.walker = n.role === 'stroller' || n.role === 'resident';

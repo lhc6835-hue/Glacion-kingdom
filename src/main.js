@@ -12,6 +12,7 @@ import { paintNatureLibrary, scatterNature, PPM } from './world/Decor.js';
 import { Town } from './world/Town.js';
 import { People } from './world/People.js';
 import { Pickups } from './world/Pickups.js';
+import { Effects } from './world/Effects.js';
 import { SkyView } from './world/SkyView.js';
 import { DayNight } from './world/DayNight.js';
 import { Atlas } from './gfx/Atlas.js';
@@ -63,9 +64,10 @@ class Game {
     scene.add(this.shadows.mesh);
 
     this.ui.progress(0.72, '숲을 심는 중…'); await frame();
-    scatterNature(world, this.natureLib, this.sprites, this.shadows, this.collision);
+    // ?q=low halves the plant density for weaker devices.
+    scatterNature(world, this.natureLib, this.sprites, this.shadows, this.collision, engine.params.get('q') === 'low' ? 0.5 : 1);
     this.town.place(this.sprites, this.glow, this.shadows);
-    for (const g of this.town.gardens) {
+    for (const g of [...this.town.gardens, ...this.town.plazaPlants]) {
       const reg = this.natureLib[g.kind][Math.floor((g.x * 7 + g.z * 3) % this.natureLib[g.kind].length + this.natureLib[g.kind].length) % this.natureLib[g.kind].length];
       const y = world.groundHeight(g.x, g.z);
       this.sprites.add(reg, g.x, y, g.z, PPM, { sway: 0.1, scale: g.kind === 'bush' || g.kind === 'flowerbush' ? 1 : 0.8 });
@@ -79,6 +81,7 @@ class Game {
     this.ui.progress(0.9, '깃털족을 깨우는 중…'); await frame();
     this.people = new People(scene, renderer, world, this.collision, this.town);
     this.pickups = new Pickups(scene, renderer, world, this.state);
+    this.effects = new Effects(scene, renderer, world, this.water.splashes);
     this.player = new Player(world, this.collision, this.town.walkables);
     this.rig = new CameraRig(camera);
     this.audio = new Audio(this.state.settings);
@@ -160,6 +163,10 @@ class Game {
     this.ground.update(this.rig.camera.position.x, this.rig.camera.position.z);
     this.sky.update(dt, t, this.engine.camera);
     this.people.draw(player);
+    const lk = Math.hypot((player.pos.x - 20) / 262, (player.pos.z - 205) / 172);
+    this.effects.blossomNear = lk < 1.7 || !!(this.world.flagAt(player.pos.x, player.pos.z) & F_CITY);
+    const h = this.dayNight.time;
+    this.effects.update(dt, t, player, look.uNight.value, h > 9 && h < 18 ? 1 : 0);
     if (playing) this.updateHud();
     this.audio.update(this.soundEnv());
     input.endFrame();

@@ -57,10 +57,10 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
         }` : ''}
         ${cutout ? 'if (t.a < 0.5) discard;' : 'if (t.a < 0.003) discard;'}
         vec3 col = t.rgb / max(t.a, 1e-3);
-        col *= vParam.y;
+        ${cutout || additive ? 'col *= vParam.y;' : ''}
         ${additive ? 'col *= uGlow * vParam.x;' : 'col = col * mix(uLight, vec3(1.0), vParam.x);'}
         col = haze(col, length(vP - cameraPosition));
-        gl_FragColor = vec4(col, ${cutout ? '1.0' : 't.a'});
+        gl_FragColor = vec4(col, ${cutout ? '1.0' : additive ? 't.a' : 't.a * vParam.y'});
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,

@@ -37,7 +37,7 @@ export function paintNatureLibrary(atlas) {
 
 const TREE_TRUNK = { oak: 0.55, spring: 0.45, deep: 0.7, blossom: 0.45, magenta: 0.4, autumn: 0.5, gold: 0.45, pine: 0.45, column: 0.35 };
 
-export function scatterNature(world, lib, layer, shadows, collision) {
+export function scatterNature(world, lib, layer, shadows, collision, density = 1) {
   const biome = new Simplex2(77), grove = new Simplex2(78);
   const H = world.height, F = world.flags;
   const pick = (arr, h) => arr[Math.floor(h * arr.length) % arr.length];
@@ -63,7 +63,10 @@ export function scatterNature(world, lib, layer, shadows, collision) {
     const nearWater = !(f & F_WATER) && (F[k + 1] & F_WATER || F[k - 1] & F_WATER || F[k + N] & F_WATER || F[k - N] & F_WATER);
 
     if (f & F_WATER) continue;
+    if (density < 1 && hash2(i, j, 13) > density) continue;
     if (Math.hypot(x - START.x, z - START.z) < 7) continue; // keep the first view of the hero clear
+    // A vista corridor from Sunmeadow Rise: only low plants between the hill and the lake.
+    const vista = z < START.z + 4 && z > START.z - 110 && Math.abs(x - START.x) < 40 + (START.z - z) * 0.9;
     if (nearWater && r0 < 0.4) { addSmall('reeds', x, y, z, 0.25); continue; }
     if (f & F_NOTREE) {
       if (!(f & F_ROAD) && r1 < 0.05 && !(f & 4)) addSmall('tuft', x, y, z, 0.2);
@@ -78,6 +81,7 @@ export function scatterNature(world, lib, layer, shadows, collision) {
 
     const dens = world.forest[k];
     const g = grove.noise(x / 70, z / 70);
+    if (vista) { if (r0 < 0.25) addSmall(r1 < 0.5 ? 'flowerbush' : 'tuft', x, y, z, 0.2); continue; }
     if (r0 < dens * 0.62 + 0.025 + Math.max(0, g) * 0.04) addTree(pickTree(x, z, y, r1), x, y, z, r2);
     else if (r0 < dens * 0.62 + 0.12) addSmall(r1 < 0.12 ? 'rock' : r1 < 0.5 ? 'tuft' : r1 < 0.75 ? 'bush' : 'flowerbush', x, y, z, 0.2);
     else if (r1 < 0.35) addSmall('tuft', x, y, z, 0.25);

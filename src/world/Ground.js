@@ -244,10 +244,12 @@ function createGroundMaterial(matTex) {
 
         // Cobbles inside the city and on causeways.
         float pave = smoothstep(0.25, 0.6, m.g);
-        vec3 cb = voro(q * 1.25 + vec2(0.0, q.x * 0.05));
-        vec3 stone = mix(srgb(vec3(0.74, 0.69, 0.60)), srgb(vec3(0.60, 0.57, 0.53)), cb.y);
+        vec3 cb = voro(q * 2.3 + vec2(0.0, q.x * 0.04));
+        vec3 stone = mix(srgb(vec3(0.76, 0.71, 0.62)), srgb(vec3(0.66, 0.62, 0.56)), cb.y);
         stone *= 0.9 + 0.18 * smoothstep(0.0, 0.5, -cb.z); // painted highlight on the upper-left of each stone
-        vec3 cobble = mix(srgb(vec3(0.38, 0.35, 0.31)), stone, smoothstep(0.03, 0.12, cb.x));
+        vec3 cobble = mix(srgb(vec3(0.50, 0.46, 0.40)), stone, smoothstep(0.02, 0.1, cb.x));
+        // Large slabs in the squares, worn paths of lighter stone.
+        cobble *= 0.94 + 0.1 * smoothstep(-0.3, 0.6, snoise(q * 0.06));
         // City gardens where paving is light.
         float garden = smoothstep(0.62, 0.3, m.g) * (1.0 - m.r);
         col = mix(col, mix(cobble, grass, garden), pave);
@@ -290,14 +292,24 @@ function createGroundMaterial(matTex) {
           col = mix(srgb(vec3(0.40, 0.37, 0.33)), st, mortar);
         } else {
           // Natural cliff: big painterly rock masses with strata and cracks.
-          vec3 v = voro(vec2(u * 0.16, P.y * 0.2 + snoise(vec2(u * 0.05, P.y * 0.05)) * 0.6));
-          float strata = snoise(vec2(u * 0.02, P.y * 0.55)) * 0.5 + 0.5;
-          vec3 rockA = srgb(vec3(0.70, 0.64, 0.55));
-          vec3 rockB = srgb(vec3(0.50, 0.50, 0.53));
-          col = mix(rockA, rockB, v.y * 0.6 + strata * 0.3);
-          col *= 0.88 + 0.22 * smoothstep(0.3, -0.4, v.z);         // lit upper-left of each mass
-          col = mix(col * 0.45, col, smoothstep(0.0, 0.07, v.x));    // dark cracks
-          col = mix(col, srgb(vec3(0.82, 0.74, 0.58)), smoothstep(0.55, 0.9, snoise(vec2(u * 0.08, P.y * 0.12))) * 0.3);
+          // Natural cliff: tall weathered rock masses (stretched vertically), ledges, water stains.
+          vec2 rq = vec2(u * 0.075, P.y * 0.045 + snoise(vec2(u * 0.03, P.y * 0.02)) * 0.5);
+          vec3 v = voro(rq);
+          float strata = snoise(vec2(u * 0.015, P.y * 0.35)) * 0.5 + 0.5;
+          float fine = snoise(vec2(u * 0.6, P.y * 0.25));
+          vec3 rockA = srgb(vec3(0.74, 0.67, 0.56));
+          vec3 rockB = srgb(vec3(0.54, 0.53, 0.55));
+          col = mix(rockA, rockB, v.y * 0.5 + strata * 0.35);
+          col *= 0.86 + 0.26 * smoothstep(0.25, -0.35, v.z);        // each mass lit on its upper left
+          col = mix(col * 0.62, col, smoothstep(0.0, 0.035, v.x));    // soft clefts between masses
+          col *= 0.94 + 0.08 * fine;
+          // Vertical rain streaks and pale mineral runs.
+          float streak = smoothstep(0.6, 0.95, snoise(vec2(u * 0.9, P.y * 0.02 + 3.0)));
+          col = mix(col, col * 0.78, streak * 0.5);
+          col = mix(col, srgb(vec3(0.86, 0.80, 0.68)), smoothstep(0.62, 0.92, snoise(vec2(u * 0.05, P.y * 0.08))) * 0.25);
+          // Grassy ledges every few metres.
+          float ledge = smoothstep(0.88, 0.97, sin(P.y * 0.55 + snoise(vec2(u * 0.04, 0.0)) * 2.0)) * smoothstep(0.2, 0.7, snoise(vec2(u * 0.12, P.y * 0.1)));
+          col = mix(col, srgb(vec3(0.36, 0.56, 0.28)), ledge * 0.8);
         }
         // Moss and hanging ivy from the top edge.
         float ivyLen = 1.2 + 3.5 * smoothstep(-0.2, 0.9, snoise(vec2(u * 0.35, 1.0))) * (0.5 + 0.5 * snoise(vec2(u * 2.2, 7.0)));

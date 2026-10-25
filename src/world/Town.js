@@ -8,7 +8,8 @@ import { FACILITIES } from '../data/facilities.js';
 // curtain wall and gates, rows of south-facing houses along east-west streets, the plaza,
 // the facilities, Castle Valcrest on its rock, the Gorge Bridge and the Greyspire ruins.
 
-const ROW_Z = [40, 14, -12, -38, -64, -124, -150, -176, -202];
+// Streets run east-west; each entry is the street line, houses stand on its north side.
+const ROW_Z = [44, 26, 8, -10, -28, -46, -62, -128, -146, -164, -182, -200, -216];
 const PLAZA = { x: 300, z: -94, rx: 52, rz: 28 };
 
 export class Town {
@@ -19,7 +20,8 @@ export class Town {
     this.interactables = [];
     this.walkables = [];
     this.npcSpots = [];     // where townsfolk like to be
-    this.streets = ROW_Z.map((z) => ({ z: z + 4 }));
+    this.streets = ROW_Z.map((z) => ({ z: z + 1 }));
+    this.plaza = PLAZA;
   }
 
   // Paint every piece and record where it goes. Call before the atlas is uploaded.
@@ -193,6 +195,15 @@ export class Town {
       this.collision.box(x - 2.2, z, x + 2.2, z + 2, { kind: 'stall' });
       this.npcSpots.push({ x, z: z + 3.2, role: 'merchant', name: `${['과일', '빵', '꽃', '생선', '옷감', '열매'][k]} 노점상` });
     }
+    // Flower beds and blossom trees ringing the square.
+    this.plazaPlants = [];
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2 + 0.11;
+      if (Math.abs(Math.sin(a)) > 0.92 && Math.cos(a) > -0.2 && Math.sin(a) > 0) continue; // keep the south entry open
+      const x = P.x + Math.cos(a) * (P.rx - 9), z = P.z + Math.sin(a) * (P.rz - 7);
+      this.plazaPlants.push({ x, z, kind: k % 3 === 0 ? 'blossom' : 'flowerbush' });
+    }
+    for (const [dx, dz] of [[-16, 6], [16, 6], [-24, -2], [24, -2], [-10, 12], [10, 12]]) this.plazaPlants.push({ x: P.x + dx, z: P.z + dz, kind: 'flowerbush' });
     const lamp = A.paintLamp(620);
     const bench = A.paintBench(621);
     for (let k = 0; k < 8; k++) {
@@ -235,9 +246,9 @@ export class Town {
 
     // Facilities first, at chosen spots.
     const spots = {
-      guild: [PLAZA.x + 2, -124], inn: [244, -64], smithy: [176, 14], potion: [262, 40], magic: [372, -38], junk: [430, 14],
-      food: [250, -12], store: [345, 40], library: [246, -150], temple: [420, -176], bank: [214, -38], auction: [372, -124],
-      stable: [420, 40], barracks: [236, 40], tailor: [348, -12], bakery: [400, -12],
+      guild: [PLAZA.x + 2, -127], inn: [246, -61], smithy: [176, 9], potion: [262, 45], magic: [372, -27], junk: [430, 9],
+      food: [250, -9], store: [345, 45], library: [246, -145], temple: [420, -181], bank: [214, -27], auction: [372, -127],
+      stable: [420, 45], barracks: [236, 45], tailor: [348, -9], bakery: [400, -9],
     };
     for (const fac of FACILITIES) {
       const sp = spots[fac.id];
@@ -256,7 +267,7 @@ export class Town {
           awning: ['food', 'store', 'bakery', 'potion'].includes(fac.id) ? r.pick([[0.75, 0.25, 0.25], [0.25, 0.45, 0.65], [0.3, 0.55, 0.35]]) : null, depth,
         });
       }
-      const zFront = zf - 4;
+      const zFront = zf - 3;
       this.put(res, x, zFront, { lit: 0.95 });
       reserved.push({ x0: x - width / 2, x1: x + width / 2, z0: zFront - depth, z1: zFront });
       this.collision.box(x - width / 2, zFront - depth, x + width / 2, zFront - 0.3, { kind: 'building', id: fac.id });
@@ -279,7 +290,7 @@ export class Town {
     // Ordinary houses fill the rest of every street.
     let seed = 1000;
     for (const z of ROW_Z) {
-      const zFront = z - 4 + Math.sin(z) * 0.8;
+      const zFront = z - 3 + Math.sin(z) * 0.6;
       let x = CITY_WALL.x - CITY_WALL.rx;
       while (x < CITY_WALL.x + CITY_WALL.rx) {
         const d = district(x, zFront);
@@ -299,7 +310,7 @@ export class Town {
           x += width + r.range(0.4, 2.2);
         } else x += 3;
       }
-      this.streets.push({ z: zFront + 4 });
+      this.streets.push({ z: zFront + 3 });
     }
     // Garden trees and flower beds in small gaps.
     this.gardens = [];

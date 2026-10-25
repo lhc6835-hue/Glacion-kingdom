@@ -187,10 +187,13 @@ function createSurfaceMaterial() {
         col = mix(col, col * 1.22 + 0.05, smoothstep(0.55, 0.8, r1) * 0.7);
         col = mix(col, col * 0.82, smoothstep(0.5, 0.85, r2) * 0.5);
         // Sparkles where the sun catches the ripples.
-        vec2 sc = floor(q * vec2(0.9, 2.2) + vec2(0.0, t * 0.2));
+        vec2 sq = q * vec2(0.9, 2.2) + vec2(0.0, t * 0.2);
+        vec2 sc = floor(sq);
         float sh = hash12(sc);
         float tw = 0.5 + 0.5 * sin(t * 3.0 + sh * 30.0);
-        float spark = step(0.985, sh) * tw * smoothstep(0.3, 0.8, r1 * 0.5 + 0.5) * (1.0 - uNight * 0.7);
+        // Round glints, not cell-shaped patches.
+        float dot = smoothstep(0.32, 0.0, length((fract(sq) - 0.5) * vec2(1.0, 0.45)));
+        float spark = step(0.985, sh) * dot * tw * smoothstep(0.3, 0.8, r1 * 0.5 + 0.5) * (1.0 - uNight * 0.7);
         col += vec3(1.0, 0.97, 0.85) * spark * 0.9 * uLight;
 
         // Shore foam.
