@@ -22,6 +22,13 @@ const KEYS = [
 ];
 const _a = new THREE.Color(), _b = new THREE.Color();
 
+// The painter's key light: hour, colour, strength.
+const KEY = [
+  [0.0, 0x8ea6ee, 0.32], [4.8, 0x8ea6ee, 0.32], [5.8, 0xffb4a0, 0.7], [7.0, 0xffd79a, 0.9],
+  [12.0, 0xfff0c8, 0.8], [16.0, 0xffd38a, 1.0], [18.2, 0xff9e58, 1.05], [19.3, 0xf08a8a, 0.7],
+  [20.4, 0x8ea6ee, 0.35], [24.0, 0x8ea6ee, 0.32],
+];
+
 export class DayNight {
   constructor() {
     this.time = 15.3;
@@ -48,6 +55,14 @@ export class DayNight {
     look.uNight.value = k0[6] + (k1[6] - k0[6]) * s;
     look.uGlow.value = k0[7] + (k1[7] - k0[7]) * s;
     look.uShadow.value.setRGB(0.55, 0.62, 0.8).lerp(new THREE.Color(0.35, 0.4, 0.7), look.uNight.value);
+
+    let ki = 0;
+    while (ki < KEY.length - 2 && KEY[ki + 1][0] <= h) ki++;
+    const q0 = KEY[ki], q1 = KEY[ki + 1];
+    const kt = (h - q0[0]) / (q1[0] - q0[0]), ks = kt * kt * (3 - 2 * kt);
+    _a.setHex(q0[1]); _b.setHex(q1[1]);
+    look.uKey.value.copy(_a).lerp(_b, ks);
+    look.uKeyStrength.value = q0[2] + (q1[2] - q0[2]) * ks;
 
     // Sun: rises in the east (right), passes behind the viewer at noon (south), sets in the west (left).
     const phi = ((h - 6) / 12) * Math.PI;

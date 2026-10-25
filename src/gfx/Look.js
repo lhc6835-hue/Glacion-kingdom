@@ -16,11 +16,15 @@ export const look = {
   uWind: { value: 1 },
   uWet: { value: 0 },
   uSnow: { value: 0 },
+  // Key light: always from the upper left, coloured by the hour (gold by day, silver at night).
+  uKey: { value: new THREE.Color(1, 0.85, 0.6) },
+  uKeyStrength: { value: 0.9 },
 };
 
 export const glslCommon = /* glsl */`
 uniform float uTime, uNight, uGlow, uWind, uWet, uSnow, uHazeNear, uHazeFar;
-uniform vec3 uLight, uShadow, uSunDir, uHaze;
+uniform vec3 uLight, uShadow, uSunDir, uHaze, uKey;
+uniform float uKeyStrength;
 vec3 _m289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
 vec2 _m289(vec2 x){return x-floor(x*(1.0/289.0))*289.0;}
 vec3 _perm(vec3 x){return _m289(((x*34.0)+1.0)*x);}

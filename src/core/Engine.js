@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Post } from '../gfx/Post.js';
 
 // Renderer, camera and the frame loop. Systems register update callbacks in order.
 export class Engine {
@@ -20,8 +21,13 @@ export class Engine {
     this.frame = 0;
     this.running = false;
 
-    window.addEventListener('resize', () => this.resize());
     this.resize();
+    // Post-processing (light shafts, glow, grading) unless the low-quality mode is asked for.
+    if (this.params.get('q') !== 'low') {
+      this.post = new Post(this.renderer, this.scene, this.camera);
+      this.renderFn = () => this.post.render();
+    }
+    window.addEventListener('resize', () => this.resize());
   }
 
   resize() {
@@ -29,6 +35,7 @@ export class Engine {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.post?.resize(w, h);
     for (const s of this.systems) s.resize?.(w, h);
   }
 

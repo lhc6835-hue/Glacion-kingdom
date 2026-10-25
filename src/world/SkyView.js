@@ -35,6 +35,10 @@ export class SkyView {
           float up = clamp(d.y, 0.0, 1.0);
           vec3 col = mix(uHorizon, uZenith, pow(up, 0.5));
           col = mix(col, uHorizon * 1.06, exp(-up * 14.0) * 0.5);
+          // Painter's light: a warm glow always sits in the upper left of the sky.
+          vec3 kd = normalize(vec3(-0.62, 0.42, -0.66));
+          float kg = max(dot(d, kd), 0.0);
+          col += uKey * (pow(kg, 4.0) * 0.32 + pow(kg, 24.0) * 0.35 + pow(kg, 200.0) * 0.6) * uKeyStrength;
           vec3 s = normalize(uSunPos);
           float sd = max(dot(d, s), 0.0);
           col += uSunCol * (pow(sd, 5.0) * 0.28 + pow(sd, 40.0) * 0.35);

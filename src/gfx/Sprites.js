@@ -28,9 +28,11 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
       attribute vec4 iParam; // x sway, y emissive, z flip(±1), w brightness
       uniform float uTime, uWind;
       varying vec2 vUv;
+      varying vec2 vLocal;
       varying vec3 vP;
       varying vec2 vParam;
       void main(){
+        vLocal = vec2(iParam.z > 0.0 ? uv.x : 1.0 - uv.x, uv.y);
         vec3 wp = iPos + vec3(position.x * iSize.x * iParam.z, position.y * iSize.y, 0.0);
         float s = iParam.x * position.y * position.y;
         float ph = iPos.x * 0.37 + iPos.z * 0.21;
@@ -44,6 +46,7 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
       ${glslCommon}
       uniform sampler2D uMap;
       uniform vec3 uPlayer;
+      varying vec2 vLocal;
       varying vec2 vUv;
       varying vec3 vP;
       varying vec2 vParam;
@@ -58,7 +61,11 @@ function spriteMaterial(texture, { additive = false, cutout = true } = {}) {
         ${cutout ? 'if (t.a < 0.5) discard;' : 'if (t.a < 0.003) discard;'}
         vec3 col = t.rgb / max(t.a, 1e-3);
         ${cutout || additive ? 'col *= vParam.y;' : ''}
-        ${additive ? 'col *= uGlow * vParam.x;' : 'col = col * mix(uLight, vec3(1.0), vParam.x);'}
+        ${additive ? 'col *= uGlow * vParam.x;' : `col = col * mix(uLight, vec3(1.0), vParam.x);
+        // Key light kisses the upper-left of every painted object; the lower right cools.
+        float kiss = smoothstep(0.35, 1.0, vLocal.y) * (1.0 - vLocal.x * 0.8);
+        col *= mix(vec3(1.0), uKey * 1.18, kiss * 0.35 * uKeyStrength);
+        col *= mix(vec3(1.0), vec3(0.88, 0.93, 1.06), (1.0 - vLocal.y) * vLocal.x * 0.35);`}
         col = haze(col, length(vP - cameraPosition));
         gl_FragColor = vec4(col, ${cutout ? '1.0' : additive ? 't.a' : 't.a * vParam.y'});
         #include <tonemapping_fragment>
