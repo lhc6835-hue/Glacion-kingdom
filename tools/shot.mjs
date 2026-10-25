@@ -6,7 +6,7 @@ import { serve } from './serve.mjs';
 
 const [out = 'shot.png', wait = '4000', script = ''] = process.argv.slice(2);
 const server = await serve(new URL('../dist', import.meta.url).pathname);
-const url = `http://127.0.0.1:${server.address().port}/index.html${process.env.QS ?? '?lowres'}`;
+const url = `http://127.0.0.1:${server.address().port}/${process.env.PAGE || "index.html"}${process.env.QS ?? '?lowres'}`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: +(process.env.W || 1280), height: +(process.env.H || 720) } });
 const logs = [];

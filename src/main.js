@@ -1,32 +1,45 @@
 import * as THREE from 'three';
 import { Engine } from './core/Engine.js';
-import { Sky } from './world/Sky.js';
+import { CameraRig } from './core/CameraRig.js';
+import { WorldData } from './world/WorldData.js';
+import { Ground } from './world/Ground.js';
+import { WaterView } from './world/WaterView.js';
+import { Collision } from './world/Collision.js';
+import { paintNatureLibrary, scatterNature } from './world/Decor.js';
+import { Atlas } from './gfx/Atlas.js';
+import { SpriteLayer, ShadowLayer } from './gfx/Sprites.js';
+import { look } from './gfx/Look.js';
+import { SkyView } from './world/SkyView.js';
 import { DayNight } from './world/DayNight.js';
-import { Terrain } from './world/Terrain.js';
-import { Water } from './world/Water.js';
-import { atmo } from './gfx/Atmosphere.js';
-import { heightAt } from './world/Heightfield.js';
-import { START, CASTLE } from './world/WorldLayout.js';
+import { START } from './world/Layout.js';
 
 const engine = new Engine(document.getElementById('game'));
 const { scene, camera } = engine;
-const sky = new Sky(scene);
-const dayNight = new DayNight(scene, engine.renderer);
-const terrain = new Terrain(scene);
-const water = new Water(scene);
-
-const focus = new THREE.Vector3(START.x, heightAt(START.x, START.z) + 1.7, START.z);
-camera.position.copy(focus).add(new THREE.Vector3(0, 3, 8));
-camera.lookAt(CASTLE.x, 220, CASTLE.z);
-terrain.buildAll(camera.position.x, camera.position.z);
-
-engine.add({
-  update(dt, t) {
-    atmo.uTime.value = t;
-    dayNight.update(dt, focus);
-    terrain.update(camera.position.x, camera.position.z);
-    sky.update(camera);
-  },
-});
+const t0 = performance.now();
+const world = new WorldData();
+for (const _ of world.generate());
+console.log('world gen', Math.round(performance.now() - t0), 'ms, falls', world.falls.length);
+const ground = new Ground(scene, world);
+const water = new WaterView(scene, world);
+const collision = new Collision();
+const atlas = new Atlas(4096);
+const lib = paintNatureLibrary(atlas);
+console.log('painted', Math.round(performance.now() - t0), 'ms pages', atlas.pages.length);
+const tex = atlas.textures(engine.renderer);
+const layer = new SpriteLayer(tex[0], 260000);
+const shadows = new ShadowLayer(120000);
+const stats = scatterNature(world, lib, layer, shadows, collision);
+layer.commit(); shadows.commit();
+scene.add(shadows.mesh, layer.mesh);
+console.log('scatter', JSON.stringify(stats), Math.round(performance.now() - t0), 'ms');
+const sky = new SkyView(scene, engine.renderer);
+const dayNight = new DayNight();
+if (engine.params.has('t')) dayNight.setTime(+engine.params.get('t'));
+const rig = new CameraRig(camera);
+const focus = new THREE.Vector3(START.x, world.groundHeight(START.x, START.z), START.z);
+rig.snap(focus);
+ground.buildAll(focus.x, focus.z);
+console.log('ground built', Math.round(performance.now() - t0), 'ms');
+engine.add({ update(dt, t) { look.uTime.value = t; dayNight.update(dt); sky.update(dt, t, camera); ground.update(rig.camera.position.x, rig.camera.position.z); } });
 engine.start();
-window.__glacion = { engine, dayNight, terrain, camera, THREE };
+window.__g = { engine, rig, world, focus, THREE };
