@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --ui: 1;
   --bg: #0c1a1a; --panel: #112422; --panel2: #16302c; --line: #2f5650; --line2: #4a7a70;
   --ink: #e4efe6; --dim: #9ab4aa; --gold: #f2c84a; --crit: #5fb8ff; --great: #6fe08a; --bad: #e86a5a;

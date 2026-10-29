@@ -329,7 +329,7 @@ export class UI {
       <label class="set"><span>번쩍임 줄이기</span><input type="checkbox" data-set="reduceFlash" ${s.reduceFlash ? 'checked' : ''}></label>
       ${range('uiScale', 'UI 크기', 0.8, 1.4, 0.05)}
       <h3>조작</h3><p class="note">A/D·방향키 이동 · Shift 달리기 · Space 점프 · 클릭 또는 J 공격 · Q 클래스 기술 · E 상호작용 · I 가방 · C 도감 · Esc 닫기/설정</p>
-      <h3>저장</h3><div class="row"><button data-act="saveNow">지금 저장</button><span class="note grow">진행 상황은 20초마다, 그리고 창을 닫을 때 자동 저장됩니다.</span><button class="danger" data-act="wipe">데이터 초기화</button></div>
+      <h3>저장</h3><div class="row"><button data-act="saveNow">지금 저장</button><span class="note grow">진행 상황은 20초마다, 그리고 창을 닫을 때 자동 저장됩니다.</span><button class="danger" data-act="wipe">${this.wipeArmed ? '한 번 더 누르면 모두 지웁니다' : '데이터 초기화'}</button></div>
     </div>`;
   }
 
@@ -371,7 +371,12 @@ export class UI {
       case 'equip': if (ok(g.economy.equip(arg))) g.combat.refreshMods(); break;
       case 'star': if (ok(g.economy.upgradeAxe(arg), '도끼 파편이 부족합니다')) { g.combat.refreshMods(); g.audio.play('buy'); } break;
       case 'saveNow': this.toast(g.save() ? '저장했습니다' : '저장하지 못했습니다 (브라우저 저장소를 쓸 수 없음)', g.lastSaveOk ? '' : 'bad'); break;
-      case 'wipe': if (confirm('모든 진행 상황을 지울까요? 되돌릴 수 없습니다.')) g.wipe(); return;
+      case 'wipe':
+        // two-step confirmation inside the page (browser dialogs are not always available)
+        if (this.wipeArmed) { g.wipe(); return; }
+        this.wipeArmed = true;
+        setTimeout(() => { this.wipeArmed = false; if (this.panel === 'settings') this.render(); }, 4000);
+        break;
       default: break;
     }
     this.render();
