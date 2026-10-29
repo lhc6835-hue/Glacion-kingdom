@@ -13,14 +13,14 @@ export const TREES = {
     ko: '계곡 소나무', en: 'Valley Pine', rarity: 0,
     hp: 80, def: 2, logs: 3, respawn: 26, markerSpeed: 1.05, hardness: 1.0,
     log: 'log_pine', drops: [],
-    art: { kind: 'pine', h: 92, w: 44, trunk: 6 },
+    art: { kind: 'pine', h: 92, w: 44, trunk: 7 },
     lore: '그늘진 비탈을 따라 곧게 자란다. 송진 냄새가 계곡 공기를 채운다.',
   },
   birch: {
     ko: '호박 자작나무', en: 'Amber Birch', rarity: 1,
     hp: 150, def: 4, logs: 3, respawn: 40, markerSpeed: 1.1, hardness: 1.4,
     log: 'log_birch', drops: [{ item: 'amber_sap', chance: 0.5, min: 1, max: 1 }, { essence: true, chance: 0.3, min: 1, max: 1 }],
-    art: { kind: 'birch', h: 84, w: 46, trunk: 5 },
+    art: { kind: 'birch', h: 84, w: 50, trunk: 5 },
     lore: '하얀 껍질 아래로 호박빛 수액이 흐른다. 서늘한 숲에서 유난히 따뜻해 보인다.',
   },
   silverleaf: {

@@ -104,7 +104,7 @@ export class Renderer {
     for (const dct of this.decor) if (dct.back && vis(dct.x, 20)) g.drawImage(dct.art.c, dct.x - dct.art.ax - camX, groundY(dct.x) - dct.art.ay - camY + 1);
     for (const tr of f.trees.list) if (vis(tr.x)) this.tree(g, tr, camX, camY, t, f);
     f.ambient.drawBack(g, camX, camY, t);
-    this.hero(g, f, camX, camY);
+    this.camRounded = { x: camX, y: camY };
     f.particles.draw(g, camX, camY);
     this.frontTufts(g, f, camX, camY, t);
     for (const dct of this.decor) if (!dct.back && vis(dct.x, 20)) g.drawImage(dct.art.c, dct.x - dct.art.ax - camX, groundY(dct.x) - dct.art.ay - camY + 3);
@@ -116,7 +116,6 @@ export class Renderer {
     const fgx = camX * 1.15;
     this.stripScreen(g, this.strips.fg.bot, fgx, H - this.strips.fg.bot.H + Math.round((camY0 - camY) * 1.15) + 6);
     this.stripScreen(g, this.strips.fg.top, fgx + 300, -6 + Math.round((camY0 - camY) * 1.15) - 26);
-    if (f.cineLeaves) f.cineLeaves(g);
 
     // ── grade: cool shade over everything, deeper at night ──
     g.globalCompositeOperation = 'multiply';
@@ -317,11 +316,34 @@ export class Renderer {
     for (let i = 1; i < 4; i++) { ug.fillStyle = PAL.ink; ug.fillRect(x + Math.round((w * i) / 4), y, 1, 3); }
   }
 
-  hero(g, f, camX, camY) {
-    const p = f.player;
-    const axe = AXE_BY_ID[f.equipped];
-    drawHero(g, p.x - camX, p.y - camY, p.facing, p.pose, axe);
-    if (p.surpriseT > 0) { g.fillStyle = '#fff4c0'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 28, 2, 5); g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 21, 2, 2); }
+  // The hero is drawn at screen resolution (see Engine.present) so squash, tilt and sub-pixel
+  // movement stay smooth; it gets the same colour grade as the pixel world.
+  drawActor(dg, scale, f) {
+    const BW = 72, BH = 72, OX = 36, OY = 56;
+    const w = BW * scale, h = BH * scale;
+    if (!this.actor || this.actor.width !== w || this.actor.height !== h) { this.actor = makeCanvas(w, h); this.actorMask = makeCanvas(w, h); }
+    const mg = this.actorMask.getContext('2d'), ag = this.actor.getContext('2d');
+    const p = f.player, axe = AXE_BY_ID[f.equipped];
+    mg.setTransform(1, 0, 0, 1, 0, 0);
+    mg.clearRect(0, 0, w, h);
+    mg.setTransform(scale, 0, 0, scale, 0, 0);
+    mg.imageSmoothingEnabled = false;
+    drawHero(mg, OX, OY, p.facing, p.pose, axe);
+    if (p.surpriseT > 0) { mg.fillStyle = '#fff4c0'; mg.fillRect(OX - 1, OY - 30, 2, 5); mg.fillRect(OX - 1, OY - 23, 2, 2); }
+    // grade: multiply a copy, then cut it back to the hero's silhouette in a single draw
+    ag.setTransform(1, 0, 0, 1, 0, 0);
+    ag.globalCompositeOperation = 'source-over';
+    ag.clearRect(0, 0, w, h);
+    ag.drawImage(this.actorMask, 0, 0);
+    ag.globalCompositeOperation = 'multiply';
+    ag.fillStyle = f.day.cur.grade;
+    ag.fillRect(0, 0, w, h);
+    ag.globalCompositeOperation = 'destination-in';
+    ag.drawImage(this.actorMask, 0, 0);
+    ag.globalCompositeOperation = 'source-over';
+    const c = this.camRounded;
+    const sx = Math.round((p.x - c.x - OX) * scale), sy = Math.round((p.y - c.y - OY) * scale);
+    dg.drawImage(this.actor, sx, sy);
   }
 
   frontTufts(g, f, camX, camY, t) {

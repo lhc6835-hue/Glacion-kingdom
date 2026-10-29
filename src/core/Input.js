@@ -5,6 +5,7 @@ export class Input {
     this.pressed = new Set();
     this.clicks = 0;
     this.enabled = true;
+    this.touchRun = false;
     addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -16,6 +17,10 @@ export class Input {
     addEventListener('blur', () => this.keys.clear());
     canvas.addEventListener('pointerdown', (e) => { if (e.button === 0) this.clicks++; });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+  // touch buttons press and release keys like a keyboard would
+  virtual(k, on) {
+    if (on) { if (!this.keys.has(k)) this.pressed.add(k); this.keys.add(k); } else this.keys.delete(k);
   }
   down(...ks) { return this.enabled && ks.some((k) => this.keys.has(k)); }
   hit(...ks) { return this.enabled && ks.some((k) => this.pressed.has(k)); }

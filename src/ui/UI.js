@@ -34,8 +34,26 @@ export class UI {
     this.panel = null;
     this.tab = {};
     root.innerHTML = `
-      <div id="boot" class="boot"><div class="boot-title">AXENFALL</div><div class="boot-sub">그늘진 계곡의 벌목꾼</div><div class="boot-hint">클릭하거나 아무 키나 눌러 시작</div><div class="boot-note">소리가 함께 재생됩니다 · 헤드폰 권장</div></div>
-      <button id="skip" class="skip hidden">건너뛰기 ▶</button>
+      <div id="boot" class="boot">
+        <div class="embers">${Array.from({ length: 22 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i * 0.53) % 6}s;--s:${6 + (i % 5) * 1.6}s;--c:${i % 3 ? '#ffd88a' : '#9ff0d0'}"></i>`).join('')}</div>
+        <div class="boot-inner">
+          <div class="boot-kicker"><span></span>The Timber Chronicle<span></span></div>
+          <svg class="boot-emblem" viewBox="0 0 120 64" aria-hidden="true">
+            <defs><linearGradient id="emb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4c8"/><stop offset=".55" stop-color="#e6b456"/><stop offset="1" stop-color="#9a6424"/></linearGradient></defs>
+            <g fill="url(#emb)" stroke="#2a1a0a" stroke-width="1.4" stroke-linejoin="round">
+              <path d="M30 58 L84 10 L88 14 L34 62 Z"/><path d="M90 58 L36 10 L32 14 L86 62 Z"/>
+              <path d="M78 4 C92 2 100 12 98 24 C92 18 86 16 80 18 Z"/><path d="M42 4 C28 2 20 12 22 24 C28 18 34 16 40 18 Z"/>
+            </g>
+            <path d="M60 26 C52 34 52 44 60 52 C68 44 68 34 60 26 Z" fill="#8ad06a" stroke="#1e3a24" stroke-width="1.4"/>
+            <path d="M60 30 V50" stroke="#2f6a3a" stroke-width="1.2"/>
+          </svg>
+          <h1 class="boot-title" data-text="AXENFALL" aria-label="Axenfall">${[...'AXENFALL'].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('')}</h1>
+          <div class="boot-rule"><i></i></div>
+          <div class="boot-sub">그늘진 계곡의 벌목꾼</div>
+          <div class="boot-hint">화면을 누르거나 아무 키나 눌러 시작</div>
+          <div class="boot-note">소리가 함께 재생돼요 · v0.1</div>
+        </div>
+      </div>
       <div id="hud" class="hidden">
         <div class="res" id="res"></div>
         <div class="objective" id="objective"></div>
@@ -46,6 +64,16 @@ export class UI {
         <div class="equip" id="equip"></div>
         <div class="prompt hidden" id="prompt"></div>
         <div class="toasts" id="toasts"></div>
+      </div>
+      <div id="touch" class="touch hidden">
+        <div class="pad-l"><button class="tb dir" data-key="a" aria-label="왼쪽">◀</button><button class="tb dir" data-key="d" aria-label="오른쪽">▶</button></div>
+        <div class="pad-r">
+          <button class="tb small" data-key="q" aria-label="클래스 기술">기술</button>
+          <button class="tb small" data-key="e" aria-label="상호작용">E</button>
+          <button class="tb jump" data-key=" " aria-label="점프">점프</button>
+          <button class="tb chop" data-chop aria-label="도끼질">도끼</button>
+        </div>
+        <div class="rotate-hint">가로로 돌리면 더 넓게 보여요</div>
       </div>
       <div id="panelWrap" class="panel-wrap hidden"><div class="panel" id="panel"></div></div>`;
     this.$ = (id) => root.querySelector('#' + id);
@@ -62,13 +90,37 @@ export class UI {
       this.g.applySettings();
     });
     this.$('panelWrap').addEventListener('pointerdown', (e) => { if (e.target.id === 'panelWrap') this.close(); });
-    this.$('skip').addEventListener('click', () => this.g.skipCinematic());
     this.lastHud = '';
     this.refreshT = 0;
+    this.setupTouch();
   }
 
+  // On-screen controls for phones and tablets. They appear on coarse pointers or on first touch.
+  setupTouch() {
+    const t = this.$('touch'), inp = this.g.input;
+    const show = () => { document.body.classList.add('touch-mode'); inp.touchRun = true; if (this.g.mode === 'play') t.classList.remove('hidden'); };
+    if (matchMedia('(pointer: coarse)').matches) show();
+    addEventListener('touchstart', show, { once: true, passive: true });
+    for (const b of t.querySelectorAll('[data-key]')) {
+      const k = b.dataset.key;
+      const up = (e) => { e.preventDefault(); inp.virtual(k, false); b.classList.remove('on'); };
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); inp.virtual(k, true); b.classList.add('on'); });
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+    }
+    const chop = t.querySelector('[data-chop]');
+    chop.addEventListener('pointerdown', (e) => { e.preventDefault(); inp.clicks++; chop.classList.add('on'); setTimeout(() => chop.classList.remove('on'), 90); });
+  }
+
+  showTouch(v) { this.$('touch').classList.toggle('hidden', !v || !document.body.classList.contains('touch-mode')); }
+
   showBoot(v) { this.$('boot').classList.toggle('hidden', !v); }
-  showSkip(v) { this.$('skip').classList.toggle('hidden', !v); }
+  // title letters lift away and the veil fades, then play begins
+  hideBoot(done) {
+    const b = this.$('boot');
+    b.classList.add('out');
+    setTimeout(done, 380);
+    setTimeout(() => b.classList.add('hidden'), 950);
+  }
   showHud(v) { this.$('hud').classList.toggle('hidden', !v); }
 
   toast(html, kind = '') {
@@ -130,6 +182,7 @@ export class UI {
     if (this.panel === name) return;
     this.panel = name;
     this.$('panelWrap').classList.remove('hidden');
+    this.showTouch(false);
     this.g.input.enabled = false;
     this.g.audio.play('open');
     if (name === 'guild') this.g.flags.sawGuild = true;
@@ -140,6 +193,7 @@ export class UI {
     if (!this.panel) return;
     this.panel = null;
     this.$('panelWrap').classList.add('hidden');
+    this.showTouch(true);
     this.g.input.enabled = true;
     this.g.input.keys.clear();
     this.g.audio.play('close');

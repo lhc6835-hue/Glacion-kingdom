@@ -3,6 +3,7 @@
 import { TREES } from '../data/trees.js';
 import { ITEMS } from '../data/items.js';
 import { add } from './GameState.js';
+import { treeShape, sizeHp, sizeLogs } from './TreeShape.js';
 
 const DOT_TICK = 0.5;
 
@@ -15,10 +16,11 @@ export class TreeField {
   }
 
   spawn(species, x, opts = {}) {
-    const d = TREES[species];
+    const seed = opts.seed ?? Math.floor(this.rng() * 1e9);
+    const hp = Math.round(TREES[species].hp * sizeHp(treeShape(seed).k));
     const t = {
-      uid: this.nextId++, species, home: opts.home || species, x, seed: opts.seed ?? Math.floor(this.rng() * 1e9),
-      hp: d.hp, maxHp: d.hp, state: 'alive', respawnAt: 0, felledAt: 0,
+      uid: this.nextId++, species, home: opts.home || species, x, seed,
+      hp, maxHp: hp, state: 'alive', respawnAt: 0, felledAt: 0,
       burn: null, frost: null, poison: [], dotAcc: 0, dotTimer: 0,
       shake: 0, shakeDir: 1, hitFlash: 0, fallDir: 1, grow: 1, lastHitAt: -99,
     };
@@ -59,7 +61,7 @@ export class TreeField {
     }
   }
 
-  fallTime(t) { return 0.6 + TREES[t.species].art.h / 90; }
+  fallTime(t) { return 0.6 + (TREES[t.species].art.h * treeShape(t.seed).h) / 90; }
 
   tickDots(t, dt, now, onDotFell) {
     let dps = 0;
@@ -93,10 +95,10 @@ export class TreeField {
     }
     const sd = TREES[species];
     t.species = species;
-    t.hp = t.maxHp = sd.hp;
+    t.seed = Math.floor(this.rng() * 1e9);
+    t.hp = t.maxHp = Math.round(sd.hp * sizeHp(treeShape(t.seed).k));
     t.state = 'growing';
     t.grow = 0;
-    t.seed = Math.floor(this.rng() * 1e9);
     if (species !== t.home) this.events.emit('rareSpawn', { tree: t });
     return d;
   }
@@ -106,7 +108,7 @@ export class TreeField {
     const d = TREES[t.species];
     const r = this.rng;
     const out = [];
-    let logs = d.logs + mods.fellLogs + mods.harvest + (r() < mods.spirit ? 1 : 0);
+    let logs = d.logs + sizeLogs(treeShape(t.seed).k) + mods.fellLogs + mods.harvest + (r() < mods.spirit ? 1 : 0);
     add(state, d.log, logs);
     out.push({ id: d.log, n: logs });
     for (const drop of d.drops) {

@@ -32,12 +32,12 @@ try {
   await page.goto(base);
   await page.waitForFunction(() => window.__axenfall);
   check('title screen waits for input', await G(() => window.__axenfall.mode === 'boot'));
+  check('title screen shows the styled title', await G(() => document.querySelectorAll('.boot-title span').length === 8 && getComputedStyle(document.querySelector('.boot-title')).fontFamily.includes('Cinzel')));
   await page.mouse.click(640, 360);
-  await page.waitForFunction(() => window.__axenfall.mode === 'cinematic');
-  check('opening cinematic starts on click', true);
-  await page.click('#skip');
   await page.waitForFunction(() => window.__axenfall.mode === 'play');
-  check('skip button ends the cinematic once', await G(() => window.__axenfall.cine.done && !window.__axenfall.player.locked));
+  check('a click on the title goes straight into play (no cinematic)', await G(() => !window.__axenfall.player.locked));
+  await wait(1100);
+  check('title veil is gone', await G(() => document.getElementById('boot').classList.contains('hidden')));
 
   // ── movement ──
   const x0 = await G(() => window.__axenfall.player.x);
@@ -60,6 +60,7 @@ try {
   const r1 = await G(() => { const g = window.__axenfall; return { hp: g.combat.target?.hp ?? 0, crits: g.state.stats.crits }; });
   check('click on the blue zone lands a critical', r1.crits === 1, `crits=${r1.crits}`);
   check('critical deals 3× damage', hp0 - r1.hp === 18, `dealt ${hp0 - r1.hp}`);
+  check('swing squashes the hero on impact', await G(() => window.__axenfall.player.sq !== 0 || window.__axenfall.player.sqV !== 0));
   await strikeAt(0.02);
   await wait(400);
   check('click at the edge misses', await G(() => window.__axenfall.state.stats.misses === 1));
@@ -70,7 +71,7 @@ try {
   }
   await wait(2500);
   const fell = await G(() => ({ logs: window.__axenfall.state.inv.log_sapling || 0, felled: window.__axenfall.state.stats.felled.sapling || 0 }));
-  check('sapling falls and drops logs', fell.felled === 1 && fell.logs === 3, JSON.stringify(fell));
+  check('sapling falls and drops logs', fell.felled === 1 && fell.logs >= 3, JSON.stringify(fell));
 
   // ── trader: sell ──
   await G(() => { const g = window.__axenfall; g.player.x = 175; });
@@ -80,7 +81,7 @@ try {
   check('E opens the trader', true);
   await page.click('[data-act="sellAll"]');
   const sold = await G(() => ({ gold: window.__axenfall.state.gold, left: window.__axenfall.state.inv.log_sapling || 0 }));
-  check('selling logs pays Gold', sold.gold === 12 && sold.left === 0, JSON.stringify(sold));
+  check('selling logs pays Gold', sold.gold === fell.logs * 4 && sold.left === 0, JSON.stringify(sold));
   await page.keyboard.press('Escape');
   await wait(100);
   check('Esc closes the panel', await G(() => !window.__axenfall.ui.panel));
@@ -158,6 +159,30 @@ try {
   await wait(3000);
   const fps = await G(() => window.__axenfall.engine.fps);
   check('frame rate (headless, software rendering)', fps > 20, `${fps.toFixed(0)} fps`);
+  // ── phone: landscape touch screen ──
+  const mctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const m = await mctx.newPage();
+  m.on('pageerror', (e) => errors.push('mobile: ' + e.message));
+  await m.goto(base);
+  await m.waitForFunction(() => window.__axenfall);
+  await m.touchscreen.tap(420, 200);
+  await m.waitForFunction(() => window.__axenfall.mode === 'play');
+  check('touch controls appear on a phone', await m.evaluate(() => !document.getElementById('touch').classList.contains('hidden')));
+  const mx0 = await m.evaluate(() => window.__axenfall.player.x);
+  await m.dispatchEvent('[data-key="d"]', 'pointerdown', { pointerId: 1 });
+  await m.waitForTimeout(600);
+  await m.dispatchEvent('[data-key="d"]', 'pointerup', { pointerId: 1 });
+  check('▶ button walks right', (await m.evaluate(() => window.__axenfall.player.x)) > mx0 + 20);
+  await m.evaluate(() => { window.__axenfall.player.x = 800; });
+  await m.waitForTimeout(150);
+  await m.dispatchEvent('[data-chop]', 'pointerdown', { pointerId: 2 });
+  await m.waitForTimeout(150);
+  check('도끼 button starts chopping', await m.evaluate(() => !!window.__axenfall.combat.target));
+  await m.dispatchEvent('[data-chop]', 'pointerdown', { pointerId: 3 });
+  await m.waitForTimeout(700);
+  check('도끼 button strikes', await m.evaluate(() => window.__axenfall.state.stats.hits + window.__axenfall.state.stats.misses === 1));
+  check('phone layout has no horizontal overflow', await m.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await mctx.close();
   check('no runtime errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   check('test harness', false, e.message.split('\n')[0]);

@@ -10,7 +10,6 @@ import { Economy } from './Economy.js';
 import { Gacha } from './Gacha.js';
 import { Processing } from './Processing.js';
 import { Player } from './Player.js';
-import { Cinematic } from './Cinematic.js';
 import { WORLD, STATIONS, TREE_SPOTS, groundY } from './World.js';
 import { Renderer } from '../gfx/Renderer.js';
 import { Particles } from '../gfx/Particles.js';
@@ -102,34 +101,22 @@ export class Game {
       if (this.mode !== 'boot') return;
       removeEventListener('keydown', begin); removeEventListener('pointerdown', begin);
       this.audio.init();
-      this.ui.showBoot(false);
-      if (this.opts.skipIntro) this.enterPlay(); else this.startCinematic();
+      this.audio.play('title');
+      this.input.clicks = 0;
+      this.ui.hideBoot(() => this.enterPlay());
     };
     if (this.opts.autoplay) { this.ui.showBoot(false); this.enterPlay(); }
     else { addEventListener('keydown', begin); addEventListener('pointerdown', begin); }
+    // iOS only unlocks audio on a touch end, so resume there too
+    addEventListener('touchend', () => this.audio.ctx?.resume?.(), { passive: true });
     this.engine.start((dt) => this.frame(dt));
-  }
-
-  startCinematic() {
-    this.mode = 'cinematic';
-    this.cine = new Cinematic(this);
-    this.ui.showSkip(true);
-    this.input.enabled = false;
-  }
-
-  skipCinematic() { if (this.cine && !this.cine.done) this.cine.finish(); }
-
-  onCinematicEnd() {
-    this.ui.showSkip(false);
-    this.input.enabled = true;
-    this.input.clicks = 0;
-    this.enterPlay();
   }
 
   enterPlay() {
     if (this.mode === 'play') return;
     this.mode = 'play';
     this.ui.showHud(true);
+    this.ui.showTouch(true);
     this.player.locked = false;
     if (this.loadSource !== 'new') this.ui.toast(this.loadSource === 'backup' ? '저장 파일이 손상되어 백업에서 불러왔습니다' : '진행 상황을 불러왔습니다');
     if (this.offline > 60 && this.state.sawmill.level > 0) this.ui.toast(`자리를 비운 ${Math.round(this.offline / 60)}분 동안 제재소가 일했습니다`);
@@ -150,9 +137,11 @@ export class Game {
   objective() {
     const s = this.state;
     const owned = Object.keys(s.axes).length;
-    if (!s.stats.hits) return '나무 앞에 서서 <kbd>클릭</kbd>해 벌목을 시작하세요. 마커가 <b class="c-crit">파란 구간</b>에 올 때 다시 클릭!';
+    const touch = this.isTouch();
+    const chop = touch ? '<b>도끼</b> 버튼을 눌러' : '<kbd>클릭</kbd>해';
+    if (!s.stats.hits) return `나무 앞에 서서 ${chop} 벌목을 시작하세요. 마커가 <b class="c-crit">파란 구간</b>에 올 때 다시 ${touch ? '누르세요' : '클릭!'}`;
     if (!Object.keys(s.stats.felled).length) return '나무의 HP를 0으로 만들면 쓰러집니다. 파란 구간은 <b class="c-crit">크리티컬 ×3</b>';
-    if (!s.stats.goldEarned) return '왼쪽 야영지의 <b>상인 미르</b>에게 목재를 파세요 <kbd>E</kbd>';
+    if (!s.stats.goldEarned) return `왼쪽 야영지의 <b>상인 미르</b>에게 목재를 파세요 ${touch ? '(<b>E</b> 버튼)' : '<kbd>E</kbd>'}`;
     if (owned < 2) return '골드로 상인에게서 도끼를 사거나 <b>도끼 제단</b>에서 기도하세요';
     if (!s.sawmill.level) return `<b>물레방아 제재소</b>를 수리하면 원목을 비싼 판재로 가공할 수 있습니다 (${SAWMILL_LEVELS[1].cost.gold} 골드)`;
     if (s.classes.owned.length < 2 && !this.flags.sawGuild) return '<b>길드 게시판</b>에서 클래스 목표를 확인하세요';
@@ -160,6 +149,8 @@ export class Game {
     if (!s.stats.felled.mossheart) return '계곡 동쪽 끝의 <b>이끼심장 소나무</b>(방어 10)에 도전하세요';
     return '';
   }
+
+  isTouch() { return document.body.classList.contains('touch-mode'); }
 
   nearStation() {
     const px = this.player.x;
@@ -184,9 +175,10 @@ export class Game {
     if (this.mode !== 'play' || this.ui.panel) return '';
     if (this.combat.target) return '';
     const st = this.nearStation();
-    if (st) return `<kbd>E</kbd> ${st.ko} — ${st.verb}`;
+    const touch = this.isTouch();
+    if (st) return `${touch ? '<b>E</b>' : '<kbd>E</kbd>'} ${st.ko} — ${st.verb}`;
     const t = this.nearTree();
-    if (t) return `<kbd>클릭</kbd>/<kbd>J</kbd> ${TREES[t.species].ko} 벌목 시작`;
+    if (t) return touch ? `<b>도끼</b> ${TREES[t.species].ko} 벌목 시작` : `<kbd>클릭</kbd>/<kbd>J</kbd> ${TREES[t.species].ko} 벌목 시작`;
     return '';
   }
 
@@ -264,9 +256,9 @@ export class Game {
     });
     ev.on('rareSpawn', ({ tree }) => { this.ui.toast(`계곡 어딘가에 <b>${TREES[tree.species].ko}</b>가 자라났다!`, 'big'); A.play('chime'); });
     ev.on('produced', ({ id, n }) => this.ui.toast(`${ico(id)} ${ITEMS[id].ko} +${n} <small>제재소</small>`));
-    ev.on('step', ({ run }) => A.play('step', { run }));
+    ev.on('step', ({ run, x, y }) => { A.play('step', { run }); if (run) P.burst(2, x, y - 1, ['#8a7a62', '#6a5a48'], 14, 1.2, -Math.PI / 2 - this.player.facing * 0.6, 0.35, { grav: -10, drag: 3, kind: 2, size: 2 }); });
     ev.on('jump', () => A.play('jump'));
-    ev.on('land', () => { A.play('land'); P.burst(4, this.player.x, this.player.y, ['#6a5a48', '#4f6a48'], 18, 1, -Math.PI / 2, 0.35, { grav: 80 }); });
+    ev.on('land', () => { A.play('land'); P.burst(7, this.player.x, this.player.y, ['#6a5a48', '#4f6a48'], 18, 1, -Math.PI / 2, 0.35, { grav: 80 }); });
     ev.on('birdFlee', ({ x }) => A.play('whoosh', { pan: panOf(x) }));
     ev.on('active', ({ id }) => {
       const p = this.player;
@@ -310,8 +302,7 @@ export class Game {
     }
     this.particles.update(worldDt);
     this.ambient.update(worldDt, this.now, this.player, this.day, this.events);
-    if (this.mode === 'cinematic') this.cine.update(dt);
-    else this.followCam(dt);
+    this.followCam(dt);
     // screen shake from trauma (squared for a snappier falloff)
     this.trauma = Math.max(0, this.trauma - dt * 2.2);
     const sh = this.trauma * this.trauma * 6;
@@ -387,16 +378,13 @@ export class Game {
       player: this.player, combat: this.combat, trees: this.trees, particles: this.particles, ambient: this.ambient,
       equipped: this.state.equipped, sawmillLevel: this.state.sawmill.level, millBusy: this.state.sawmill.jobs.length > 0,
       rayBoost: this.rayBoost, elderGlow: this.elderGlow, reduceFlash: this.state.settings.reduceFlash,
-      cineLeaves: this.mode === 'cinematic' ? (g) => this.cine.drawWorldOverlay(g) : null,
     };
     this.renderer.draw(f);
     const camX = Math.round(this.cam.x + this.cam.shakeX), camY = Math.round(this.cam.y + this.cam.shakeY);
     this.particles.drawNumbers(e.ug, camX, camY);
     if (this.mode === 'play') this.timingBar.draw(e.ug, this.combat, e.W, e.H, dt, this.now, { x: this.player.x - camX, y: this.player.y - camY - 26 });
-    if (this.mode === 'cinematic') this.cine.drawUI(e.ug);
-    if (this.mode === 'boot') { e.ug.fillStyle = 'rgba(4,10,10,0.55)'; e.ug.fillRect(0, 0, e.W, e.H); }
     const q = this.state.settings.effects;
-    e.present(q === 'low' ? 0.7 : 1);
+    e.present(q === 'low' ? 0.7 : 1, (dg, s) => this.renderer.drawActor(dg, s, f));
   }
 }
 

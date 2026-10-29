@@ -15,6 +15,7 @@ import { TREES } from '../src/data/trees.js';
 import { ITEMS } from '../src/data/items.js';
 import { JUDGE, GACHA } from '../src/data/balance.js';
 import { SAWMILL_LEVELS } from '../src/data/processing.js';
+import { treeShape, sizeHp, sizeLogs } from '../src/game/TreeShape.js';
 
 let pass = 0, fail = 0;
 const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
@@ -75,11 +76,22 @@ check('every tree drops a known log item', allOk);
   const base = axeDamage('worn_hatchet', 0);
   swingAt(w, 0.5, now);
   const afterCrit = t.hp;
-  check('critical deals ×3 (sapling has no defence)', TREES.sapling.hp - afterCrit === Math.round(base * JUDGE.crit.mul * 1.02), `dealt ${TREES.sapling.hp - afterCrit}`);
+  check('critical deals ×3 (sapling has no defence)', t.maxHp - afterCrit === Math.round(base * JUDGE.crit.mul * 1.02), `dealt ${t.maxHp - afterCrit}`);
   const hp0 = t.hp;
   swingAt(w, 0.01, now);
   check('miss deals nothing and breaks the combo', t.hp === hp0 && w.combat.combo === 0);
   check('stats count crits', w.state.stats.crits === 1 && w.state.stats.misses === 1);
+}
+
+// ── tree size variety ──
+{
+  const shapes = Array.from({ length: 200 }, (_, i) => treeShape(1000 + i * 77));
+  const hs = shapes.map((x) => x.h), ts = shapes.map((x) => x.trunk);
+  check('trees vary in height', Math.max(...hs) / Math.min(...hs) > 1.6, `${Math.min(...hs).toFixed(2)}–${Math.max(...hs).toFixed(2)}`);
+  check('trees vary in trunk thickness', Math.max(...ts) / Math.min(...ts) > 2, `${Math.min(...ts).toFixed(2)}–${Math.max(...ts).toFixed(2)}`);
+  const w = world();
+  const big = w.trees.spawn('pine', 0, { seed: shapes.reduce((b, x, i) => (x.k > shapes[b].k ? i : b), 0) * 77 + 1000 });
+  check('bigger trees have more HP', big.maxHp > TREES.pine.hp, `${big.maxHp} vs ${TREES.pine.hp}`);
 }
 
 // ── fell and rewards ──
@@ -93,7 +105,7 @@ check('every tree drops a known log item', allOk);
   for (let i = 0; i < 10 && t.state === 'alive'; i++) swingAt(w, 0.5, now);
   check('tree falls at 0 HP', t.state !== 'alive' && t.hp === 0);
   const logs = count(w.state, 'log_sapling');
-  check('felling grants logs (+1 lumberjack bonus)', logs === TREES.sapling.logs + 1 && !!fell, `logs=${logs}`);
+  check('felling grants logs (+1 lumberjack, +1 if the tree is old)', logs === TREES.sapling.logs + 1 + sizeLogs(treeShape(t.seed).k) && !!fell, `logs=${logs}`);
   // Regrowth
   for (let i = 0; i < 60 * 40; i++) { now.t += 1 / 60; w.trees.update(1 / 60, now.t, () => {}); }
   check('tree regrows', t.state === 'alive' && t.hp === t.maxHp);

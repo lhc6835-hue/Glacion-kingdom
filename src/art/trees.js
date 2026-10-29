@@ -4,6 +4,7 @@ import { PixBuf } from '../gfx/PixBuf.js';
 import { mulberry32, hash2 } from '../core/Rng.js';
 import { PAL } from './palette.js';
 import { TREES } from '../data/trees.js';
+import { treeShape } from '../game/TreeShape.js';
 
 const TAU = Math.PI * 2;
 const LIGHT = [-0.62, -0.78]; // towards the key light (upper left)
@@ -74,7 +75,7 @@ function paintCanopy(W, H, clusters, pal, seed, opts = {}) {
 
 function paintTrunk(buf, ax, baseY, topY, wBase, wTop, pal, seed, opts = {}) {
   const rnd = mulberry32(seed);
-  const lean = (rnd() - 0.5) * 3;
+  const lean = opts.lean ?? (rnd() - 0.5) * 3;
   for (let y = topY; y <= baseY; y++) {
     const t = (y - topY) / Math.max(1, baseY - topY);
     let w = wTop + (wBase - wTop) * t;
@@ -113,64 +114,64 @@ function branch(buf, x, y, dx, dy, len, pal) {
 export function buildTree(species, seed) {
   const a = TREES[species].art;
   const rnd = mulberry32(seed);
-  const s = 0.9 + rnd() * 0.18; // per-tree size variation
-  const H = Math.round(a.h * s) + 4, W = Math.round(a.w * s) + 10;
+  const sh = treeShape(seed); // height, crown width and trunk thickness vary independently
+  const H = Math.round(a.h * sh.h) + 4, W = Math.round(a.w * sh.w) + 10;
   const ax = Math.floor(W / 2), ay = H - 2;
+  const tw = Math.max(2, a.trunk * sh.trunk);
   const trunk = new PixBuf(W, H);
   const clusters = [];
   let pal, id = 0;
   const blob = (x, y, r, piece, jag) => clusters.push({ kind: 'blob', x, y, r, piece, jag, id: id++ });
+  // a loose crown of n blobs around (cx, cy), spread rx × ry
+  const crown = (n, cx, cy, rx, ry, r0, jag) => {
+    blob(cx, cy, r0, 0, jag);
+    for (let i = 1; i < n; i++) {
+      const ang = (i / (n - 1)) * Math.PI * 1.6 - Math.PI * 1.3 + (rnd() - 0.5) * 0.6;
+      blob(cx + Math.cos(ang) * rx * (0.6 + rnd() * 0.4), cy + Math.sin(ang) * ry * (0.5 + rnd() * 0.5), r0 * (0.55 + rnd() * 0.35), 1 + (i % 3), jag);
+    }
+  };
+  const lean = sh.lean * 2.5;
 
   if (a.kind === 'pine' || a.kind === 'mossheart') {
     pal = a.kind === 'mossheart' ? ['#0c2420', '#163d30', '#22573c', '#3a7a4a', '#6aa858', '#b0dc7a'] : PAL.pine;
-    const top = 2, crownBottom = ay - Math.round(a.h * s * 0.22);
-    paintTrunk(trunk, ax, ay, top + 8, a.trunk * s, 2, PAL.bark, seed, { moss: a.kind === 'mossheart' ? 30 : 8 });
-    const tiers = a.kind === 'mossheart' ? 6 : 5;
+    // young pines are crowned to the ground, old ones show a long bare trunk
+    const top = 2, crownBottom = ay - Math.round(H * (0.1 + sh.k * 0.22));
+    paintTrunk(trunk, ax, ay, top + 8, tw, Math.max(1.5, tw * 0.3), PAL.bark, seed, { moss: a.kind === 'mossheart' ? 30 : 4 + sh.k * 14, lean });
+    const tiers = (a.kind === 'mossheart' ? 6 : 4) + Math.floor(sh.crown * 3);
     const span = crownBottom - top;
+    const droop = 0.85 + sh.crown * 0.3;
     for (let i = 0; i < tiers; i++) {
       const ty = top + Math.round((span * i) / (tiers + 0.6));
-      const th = Math.round(span / tiers) + 8;
-      const tw = (W / 2 - 3) * (0.32 + 0.68 * ((i + 1) / tiers)) * (0.92 + rnd() * 0.12);
-      clusters.push({ kind: 'tri', x: ax + (rnd() - 0.5) * 2, y: ty, w: tw, h: th, piece: Math.min(3, Math.floor((tiers - 1 - i) / 1.5)), id: id++ });
+      const th = Math.round((span / tiers) * droop) + 8;
+      const tww = (W / 2 - 3) * (0.28 + 0.72 * Math.pow((i + 1) / tiers, 0.9)) * (0.86 + rnd() * 0.2);
+      clusters.push({ kind: 'tri', x: ax + lean * (1 - i / tiers) + (rnd() - 0.5) * 2, y: ty, w: tww, h: th, piece: Math.min(3, Math.floor((tiers - 1 - i) / 1.5)), id: id++ });
     }
   } else if (a.kind === 'birch') {
     pal = PAL.birch;
-    paintTrunk(trunk, ax, ay, Math.round(H * 0.28), a.trunk * s, 2, PAL.birchBark, seed, { birch: true });
-    branch(trunk, ax, Math.round(H * 0.45), -0.9, -0.6, 9, PAL.birchBark);
-    branch(trunk, ax + 1, Math.round(H * 0.38), 0.9, -0.7, 8, PAL.birchBark);
-    const cy = H * 0.3;
-    blob(ax, cy - 6, W * 0.26, 0);
-    blob(ax - W * 0.24, cy + 4, W * 0.2, 1);
-    blob(ax + W * 0.24, cy + 2, W * 0.21, 2);
-    blob(ax - W * 0.08, cy - H * 0.16, W * 0.18, 3);
-    blob(ax + W * 0.12, cy + 10, W * 0.17, 1);
+    const crownY = H * (0.3 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY - 4), tw, Math.max(1.5, tw * 0.5), PAL.birchBark, seed, { birch: true, lean });
+    branch(trunk, ax, Math.round(H * 0.45), -0.9, -0.6, 6 + W * 0.08, PAL.birchBark);
+    branch(trunk, ax + 1, Math.round(H * 0.38), 0.9, -0.7, 5 + W * 0.08, PAL.birchBark);
+    crown(5 + Math.floor(sh.crown * 3), ax + lean, crownY, W * 0.34, H * 0.2, W * 0.27, 0.24);
   } else if (a.kind === 'silver') {
     pal = PAL.silver;
-    paintTrunk(trunk, ax, ay, Math.round(H * 0.35), a.trunk * s, 3, PAL.silverBark, seed, { moss: 10 });
-    branch(trunk, ax - 1, Math.round(H * 0.5), -1, -0.5, 12, PAL.silverBark);
-    branch(trunk, ax + 1, Math.round(H * 0.46), 1, -0.55, 11, PAL.silverBark);
-    const cy = H * 0.34;
-    blob(ax, cy - 4, W * 0.27, 0, 0.3);
-    blob(ax - W * 0.27, cy + 6, W * 0.19, 1, 0.3);
-    blob(ax + W * 0.28, cy + 4, W * 0.2, 2, 0.3);
-    blob(ax - W * 0.1, cy - H * 0.17, W * 0.2, 3, 0.3);
-    blob(ax + W * 0.16, cy - H * 0.12, W * 0.16, 3, 0.3);
-    blob(ax, cy + 10, W * 0.22, 1, 0.3);
+    const crownY = H * (0.32 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY - 2), tw, Math.max(2, tw * 0.5), PAL.silverBark, seed, { moss: 6 + sh.k * 14, lean });
+    branch(trunk, ax - 1, Math.round(H * 0.5), -1, -0.5, 7 + W * 0.1, PAL.silverBark);
+    branch(trunk, ax + 1, Math.round(H * 0.46), 1, -0.55, 7 + W * 0.1, PAL.silverBark);
+    crown(6 + Math.floor(sh.crown * 3), ax + lean, crownY, W * 0.34, H * 0.2, W * 0.27, 0.3);
   } else {
     pal = PAL.leafDeep;
-    paintTrunk(trunk, ax, ay, Math.round(H * 0.42), a.trunk * s, 2, PAL.bark, seed, { moss: 4 });
-    const cy = H * 0.36;
-    blob(ax, cy, W * 0.36, 0);
-    blob(ax - W * 0.2, cy + 5, W * 0.24, 1);
-    blob(ax + W * 0.2, cy + 4, W * 0.25, 2);
-    blob(ax + 1, cy - H * 0.13, W * 0.24, 2);
+    const crownY = H * (0.34 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY + 4), tw, Math.max(1.5, tw * 0.55), PAL.bark, seed, { moss: 4, lean });
+    crown(3 + Math.floor(sh.crown * 3), ax + lean * 0.5, crownY, W * 0.22, H * 0.12, W * 0.33, 0.22);
   }
-  const pieces = paintCanopy(W, H, clusters, pal, seed, { softEdge: a.kind === 'silver' }).map((c, i) => ({ c, amp: 0.4 + i * 0.35, phase: rnd() * TAU }));
+  const pieces = paintCanopy(W, H, clusters, pal, seed, { softEdge: a.kind === 'silver' }).map((c, i) => ({ c, amp: 0.4 + i * 0.35 + sh.k * 0.3, phase: rnd() * TAU }));
   // sparkle pixels on silverleaf, pulsing glow spots on mossheart (drawn by the renderer)
   const sparkles = [];
   if (a.kind === 'silver') for (let i = 0; i < 14; i++) sparkles.push({ x: Math.round(ax + (rnd() - 0.5) * W * 0.8), y: Math.round(H * (0.12 + rnd() * 0.4)), p: rnd() * TAU });
-  const glow = a.kind === 'mossheart' ? { x: ax, y: Math.round(ay - a.h * s * 0.3) } : null;
-  return { W, H, ax, ay, trunk: trunk.toCanvas(), pieces, sparkles, glow, stump: buildStump(a.trunk * s, a.kind, seed), logColor: pal[3] };
+  const glow = a.kind === 'mossheart' ? { x: ax, y: Math.round(ay - H * 0.3) } : null;
+  return { W, H, ax, ay, trunk: trunk.toCanvas(), pieces, sparkles, glow, stump: buildStump(tw, a.kind, seed), logColor: pal[3] };
 }
 
 function buildStump(w, kind, seed) {

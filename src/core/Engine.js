@@ -29,7 +29,8 @@ export class Engine {
     const dw = Math.round(cw * dpr), dh = Math.round(ch * dpr);
     this.display.width = dw; this.display.height = dh;
     this.display.style.width = cw + 'px'; this.display.style.height = ch + 'px';
-    this.scale = Math.max(1, Math.round(dh / BASE_H));
+    // keep at least ~320 art pixels across so portrait phones still see the scene
+    this.scale = Math.max(1, Math.min(Math.round(dh / BASE_H), Math.floor(dw / 320)));
     this.W = Math.ceil(dw / this.scale);
     this.H = Math.ceil(dh / this.scale);
     for (const [c, k] of [[this.pix, 1], [this.light, 2], [this.ui, 1]]) { c.width = this.W * k; c.height = this.H * k; }
@@ -39,11 +40,13 @@ export class Engine {
   }
 
   // Composites the three layers onto the display.
-  present(lightAlpha = 1) {
+  // actor: draws hi-res sprites (the hero) between the pixel world and the light.
+  present(lightAlpha = 1, actor = null) {
     const g = this.dg, s = this.scale;
     g.globalCompositeOperation = 'source-over';
     g.imageSmoothingEnabled = false;
     g.drawImage(this.pix, 0, 0, this.W * s, this.H * s);
+    if (actor) actor(g, s);
     if (lightAlpha > 0) {
       g.imageSmoothingEnabled = true;
       g.globalCompositeOperation = 'screen';

@@ -1,4 +1,6 @@
-// Entry point. URL options: ?play skips the title and opening, ?t=19 sets the hour, ?q=low|medium|high.
+// Entry point. URL options: ?play skips the title screen, ?t=19 sets the hour, ?q=low|medium|high.
+import '@fontsource/cinzel-decorative/latin-900.css';
+import '@fontsource/cinzel/latin-600.css';
 import { Game } from './game/Game.js';
 
 const qs = new URLSearchParams(location.search);

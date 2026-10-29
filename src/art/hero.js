@@ -61,7 +61,7 @@ function axeSprite(axe) {
 export function drawAxe(g, hx, hy, th, axe, scale = 1, alpha = 1) {
   const s = axeSprite(axe);
   g.save();
-  g.translate(Math.round(hx), Math.round(hy));
+  g.translate(hx, hy);
   g.rotate(th);
   if (scale !== 1) g.scale(scale, scale);
   g.globalAlpha *= alpha;
@@ -69,28 +69,27 @@ export function drawAxe(g, hx, hy, th, axe, scale = 1, alpha = 1) {
   g.restore();
 }
 
-// pose: { walkFrame, moving, onGround, blink, tail, axeAngle, axeOnBack, squash, lean, scarfA, faceS, mouth, smear, hand }
+// pose: { walkFrame, moving, onGround, blink, tail, axeAngle, axeOnBack, sq, rot, bob, sway, breathe, scarfA, faceS, mouth, smear }
+// Meant for a context scaled up to screen pixels: squash, tilt and position are fractional, so the
+// art keeps its square pixels while the motion stays smooth.
 export function drawHero(g, x, y, facing, pose, axe) {
   const legs = !pose.onGround ? 'jump' : pose.moving ? ['a', 'stand', 'b', 'stand'][pose.walkFrame] : 'stand';
   const spr = heroSprite(pose.blink ? 'blink' : 'open', legs, pose.tail ? 1 : 0, pose.mouth ? 'shout' : 'calm');
   const sw = spr.width, sh = spr.height;
-  const bob = pose.moving && (pose.walkFrame === 1 || pose.walkFrame === 3) ? -1 : 0;
-  // squash and lean move the sprite by whole pixels (scaling a 1:1 sprite would smear it);
-  // only the paper-flip turn scales x, and only for the few frames of a turn
-  const sq = pose.squash || 0;
-  const dipY = sq > 0.6 ? 1 : sq < -0.6 ? -1 : 0;
+  const sq = pose.sq || 0, br = pose.breathe || 0;
   const fs = pose.faceS ?? facing;
-  const flip = Math.abs(fs) < 0.12 ? 0.12 * Math.sign(fs || 1) : fs;
+  const dir = Math.sign(fs || 1);
+  const flip = Math.abs(fs) < 0.12 ? 0.12 * dir : fs; // paper-flip turn
   g.save();
   g.imageSmoothingEnabled = false;
-  // contact shadow
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  const shw = 14 + (dipY > 0 ? 2 : 0);
-  g.fillRect(Math.round(x - shw / 2), Math.round(y), shw, 1);
-  const leanX = Math.round((pose.lean || 0) * 0.7) * Math.sign(fs || 1);
-  g.translate(Math.round(x) + leanX, Math.round(y) + 1 + dipY);
-  g.scale(Math.abs(flip) > 0.98 ? Math.sign(flip) : flip, 1);
-  const top = -sh + bob;
+  // contact shadow widens when squashed, shrinks in the air
+  g.fillStyle = 'rgba(0,0,0,0.32)';
+  const shw = 13 * (1 - sq * 0.8) * (pose.onGround ? 1 : 0.7);
+  g.fillRect(x - shw / 2, y, shw, 1);
+  g.translate(x, y + 1);
+  g.rotate(((pose.rot || 0) + (pose.sway || 0)) * dir);
+  g.scale((1 - sq * 0.6 - br * 0.6) * flip, 1 + sq + br);
+  const top = -sh + (pose.bob || 0);
   // scarf tail: four pixels trailing from the neck, outlined
   const nx = -sw / 2 + 6, ny = top + 13.5;
   const sa = pose.scarfA ?? 1.2;
@@ -99,7 +98,7 @@ export function drawHero(g, x, y, facing, pose, axe) {
     for (let i = 1; i <= 4; i++) {
       const a = sa + i * 0.1;
       const px = nx - Math.cos(a) * i * 1.1, py = ny + Math.sin(a) * i * 1.1;
-      g.fillRect(Math.round(px - 0.5 - ext * 0.5), Math.round(py - 0.5 - ext * 0.5), 1 + ext, 1 + ext);
+      g.fillRect(px - 0.5 - ext * 0.5, py - 0.5 - ext * 0.5, 1 + ext, 1 + ext);
     }
   }
   // hand: rests at the belt, rises over the head while winding up, drops forward on impact
