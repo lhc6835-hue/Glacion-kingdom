@@ -203,7 +203,7 @@ export class Game {
     ev.on('hit', (h) => {
       const t = h.tree, art = R.art(t);
       const dir = this.player.facing;
-      const ix = t.x - dir * 3, iy = groundY(t.x) - 13;
+      const ix = t.x - dir * 3, iy = groundY(t.x) - 9;
       const pan = panOf(t.x);
       const J = JUDGE[h.j];
       const shake = this.state.settings.shake;
@@ -225,7 +225,7 @@ export class Game {
         P.burst(crit ? 10 : 4, t.x, top, [art.logColor, '#3a6e4a', '#5a8a5a'], 26, 2.8, Math.PI / 2, 2.2, { grav: 18, drag: 0.8, kind: 1, size: 2, spin: Math.random() * 6 });
       }
       R.flash(ix, iy, crit ? 70 : h.j === 'great' ? 34 : 20, crit ? (h.void ? 'blue' : 'white') : 'white', crit ? 0.16 : 0.1);
-      R.trail(this.player.x + dir * 2, this.player.y - 14, dir > 0 ? -2.2 : -0.9, dir > 0 ? 0.5 : -3.6, crit ? '#8fd0ff' : h.j === 'great' ? '#a8f0b8' : '#fff0c8');
+      R.trail(this.player.x + dir * 3, this.player.y - 9, dir > 0 ? -2.2 : -0.9, dir > 0 ? 0.5 : -3.6, crit ? '#8fd0ff' : h.j === 'great' ? '#a8f0b8' : '#fff0c8');
       if (crit) {
         P.burst(10, ix, iy, ['#ffffff', '#bfe6ff', '#5fb8ff'], 140, 6.28, 0, 0.3, { drag: 4, glow: 0.8, size: 1 });
         P.number(t.x, iy - 12, String(h.damage), '#8fd0ff', 2);
@@ -271,8 +271,8 @@ export class Game {
     ev.on('active', ({ id }) => {
       const p = this.player;
       const col = { heavy_chop: ['#ffd88a', '#ffffff'], focus: ['#8fd0ff', '#ffffff'], ignite: ['#ff7a2a', '#ffc04a'], overclock: ['#e8d070', '#ffffff'] }[id];
-      P.burst(18, p.x, p.y - 14, col, 60, 6.28, 0, 0.6, { drag: 3, glow: 0.8 });
-      R.flash(p.x, p.y - 14, 50, id === 'ignite' ? 'warm' : 'cyan', 0.3);
+      P.burst(18, p.x, p.y - 10, col, 60, 6.28, 0, 0.6, { drag: 3, glow: 0.8 });
+      R.flash(p.x, p.y - 10, 50, id === 'ignite' ? 'warm' : 'cyan', 0.3);
     });
     this.pendingFalls = [];
     const ico = (id) => `<img class="ico" src="${itemIcon(id)}" alt="">`;
@@ -392,7 +392,7 @@ export class Game {
     this.renderer.draw(f);
     const camX = Math.round(this.cam.x + this.cam.shakeX), camY = Math.round(this.cam.y + this.cam.shakeY);
     this.particles.drawNumbers(e.ug, camX, camY);
-    if (this.mode === 'play') this.timingBar.draw(e.ug, this.combat, e.W, e.H, dt, this.now, { x: this.player.x - camX, y: this.player.y - camY - 36 });
+    if (this.mode === 'play') this.timingBar.draw(e.ug, this.combat, e.W, e.H, dt, this.now, { x: this.player.x - camX, y: this.player.y - camY - 26 });
     if (this.mode === 'cinematic') this.cine.drawUI(e.ug);
     if (this.mode === 'boot') { e.ug.fillStyle = 'rgba(4,10,10,0.55)'; e.ug.fillRect(0, 0, e.W, e.H); }
     const q = this.state.settings.effects;

@@ -58,7 +58,7 @@ button.big { padding: .6em 1.1em; font-size: 1.05em; }
 .skill { font-size: .85em; padding: .2em .5em; }
 .skill.cd { opacity: .6; }
 .skill i { font-style: normal; color: var(--gold); }
-.prompt { position: absolute; left: 50%; bottom: calc(12px + 5.2em); transform: translateX(-50%); padding: .35em .9em; background: rgba(8,18,18,.7); border-radius: 6px; white-space: nowrap; }
+.prompt { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: .35em .9em; background: rgba(8,18,18,.7); border-radius: 6px; white-space: nowrap; }
 .toasts { position: absolute; right: 14px; top: calc(12px + 5.6em); display: flex; flex-direction: column; align-items: flex-end; gap: .35em; }
 .toast { padding: .4em .8em; background: rgba(10,24,22,.88); border: 2px solid var(--line); border-radius: 6px; animation: tin .25s ease-out; transition: opacity .5s, transform .5s; max-width: 420px; }
 .toast.out { opacity: 0; transform: translateX(20px); }

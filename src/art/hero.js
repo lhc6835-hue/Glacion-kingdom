@@ -1,129 +1,120 @@
-// The chibi lumberjack, drawn live each frame from rectangles so every limb, the scarf and the
-// axe can move independently. Coordinates are art pixels; (x, y) is the point between the feet.
-import { PAL } from './palette.js';
+// The chibi lumberjack: a 16-column letter-grid sprite (big head, tiny body) with an outline and
+// auto shading, plus an axe sprite rotated in the hand and a spring-driven scarf tail.
+// (x, y) is the point between the feet; coordinates are art pixels.
+import { buildSprite, OUTLINE } from '../gfx/Sprite.js';
 
-const C = {
-  ink: '#10181a', skin: '#f2c8a0', skinShade: '#d89c7a', cheek: '#e88a7a', eye: '#14181e', eyeHi: '#ffffff',
-  hair: '#5a3a26', hairHi: '#7a5236', cap: '#2f6a4a', capHi: '#4f8a5a', capDark: '#1e4a36', leaf: '#8ad06a',
-  shirt: '#e6dcc0', vest: '#3a5a4a', vestHi: '#4f7660', belt: '#3a2618', buckle: '#e8c05a',
-  pants: '#5a4634', pantsHi: '#6e5640', boot: '#2a1e18', scarf: '#c0583a', scarfHi: '#e07a4a',
+// Knit cap with a leaf sprig and a ribbed cuff; the face looks right.
+const HEAD = [
+  '.......ff.......',
+  '.....vvfvvv.....',
+  '...vvVVvvvvvv...',
+  '..vVVvvvvvvvvv..',
+  '..vVvvvvvvvvvv..',
+  '.vvvvvvvvvvvvvv.',
+  '.jJjJjJjJjJjJjJ.',
+  '.hhhhhhhhhhhhhh.',
+];
+const FACE = {
+  open: ['hhhhcccccccccch.', 'hhhhcccEecccEec.', '.hhhccceeccceec.'],
+  blink: ['hhhhcccccccccch.', 'hhhhccccccccccc.', '.hhhccceeccceec.'],
 };
+const LOW = { calm: ['..hhccclccmclcc.', '....ccccccccc...'], shout: ['..hhccclcmmclcc.', '....cccccmccc...'] };
+const BODY = ['.....rrrrrrr....', '....rrtttttttc..', '.....tnnynnt....'];
+const LEGS = { stand: '.....kk..kk.....', a: '....kk....kk....', b: '......kkkk......', jump: '....kk...kk.....' };
 
-function R(g, x, y, w, h, c) { g.fillStyle = c; g.fillRect(x, y, w, h); }
-
-// Rasterises the axe along angle th (0 = straight up, +90° = forward) from the hand pivot.
-export function drawAxe(g, hx, hy, th, axe, scale = 1) {
-  const dx = Math.sin(th), dy = -Math.cos(th);
-  const len = Math.round(12 * scale);
-  // shaft: light wood with a dark underside so it reads on dark foliage; grip wrap in the axe's accent
-  for (let i = -2; i <= len; i++) {
-    const px = Math.round(hx + dx * i), py = Math.round(hy + dy * i);
-    g.fillStyle = PAL.ink; g.fillRect(px + (Math.abs(dy) > 0.7 ? 1 : 0), py + (Math.abs(dy) > 0.7 ? 0 : 1), 1, 1);
-    g.fillStyle = i < 2 ? axe.accent : '#c09060';
-    g.fillRect(px, py, 1, 1);
-  }
-  g.fillStyle = PAL.ink;
-  g.fillRect(Math.round(hx - dx * 3), Math.round(hy - dy * 3), 1, 1);
-  // Blade: a wedge on the forward side of the shaft near its end.
-  const fx = Math.cos(th), fy = Math.sin(th); // forward normal of the shaft
-  const bx = hx + dx * (len - 2), by = hy + dy * (len - 2);
-  const bw = 5 * scale, bh = 3.2 * scale;
-  for (let v = -bh - 1; v <= bh + 1; v += 0.5) {
-    for (let u = 0; u <= bw + 0.5; u += 0.5) {
-      const half = bh * (0.55 + 0.45 * (u / bw)) + (u > bw - 1 ? 0.6 : 0);
-      if (Math.abs(v) > half) continue;
-      const px = Math.round(bx + fx * u + dx * v), py = Math.round(by + fy * u + dy * v);
-      const edge = u > bw - 1.2;
-      const rim = Math.abs(v) > half - 0.7;
-      g.fillStyle = edge ? '#f4fbff' : rim ? PAL.ink : (v > 0 ? axe.blade : shade(axe.blade));
-      g.fillRect(px, py, 1, 1);
-    }
-  }
-}
-
-const shadeCache = new Map();
-function shade(hex) {
-  let s = shadeCache.get(hex);
+const cache = new Map();
+function heroSprite(face, legs, tail, mouth) {
+  const key = face + legs + tail + mouth;
+  let s = cache.get(key);
   if (!s) {
-    const n = parseInt(hex.slice(1), 16);
-    const f = (v) => Math.round(v * 0.72).toString(16).padStart(2, '0');
-    s = '#' + f(n >> 16) + f((n >> 8) & 255) + f(n & 255);
-    shadeCache.set(hex, s);
+    const fc = FACE[face].slice();
+    // idle hair sway: the back lock moves down a row
+    if (tail) { fc[0] = '.' + fc[0].slice(1); fc[2] = 'h' + fc[2].slice(1); }
+    s = buildSprite([...HEAD, ...fc, ...LOW[mouth], ...BODY, LEGS[legs]]);
+    cache.set(key, s);
   }
   return s;
 }
 
-// pose: { bob, legL, legR, armL, armR, lean, squash, axe, axeAngle, axeOnBack, blink, scarf, look }
-export function drawHero(g, x, y, facing, pose, axe) {
+// Axe head on the forward side of the shaft; the hand grips row 8.5, column 5.5.
+const AXE = [
+  '....zaa....',
+  '.....nAaa..',
+  '.....naAAa.',
+  '.....naaaAa',
+  '.....naaaaa',
+  '.....naaa1.',
+  '.....n.....',
+  '.....n.....',
+  '.....n.....',
+  '.....N.....',
+];
+const axeCache = new Map();
+function axeSprite(axe) {
+  const key = axe.blade + axe.accent;
+  let s = axeCache.get(key);
+  if (!s) { s = buildSprite(AXE, axe.blade, { n: '#b48450', z: axe.accent }); axeCache.set(key, s); }
+  return s;
+}
+
+// Draws the axe with its grip at (hx, hy), rotated by th (0 = head up, + = forward).
+export function drawAxe(g, hx, hy, th, axe, scale = 1, alpha = 1) {
+  const s = axeSprite(axe);
   g.save();
-  g.translate(Math.round(x), Math.round(y));
-  if (facing < 0) g.scale(-1, 1);
-  const sq = pose.squash || 0;               // +: squashed, -: stretched
-  const bob = Math.round(pose.bob || 0);
-  const lean = Math.round(pose.lean || 0);
-  const bodyY = -12 + bob + Math.round(sq);
-  // legs
-  const leg = (lx, lift, hi) => {
-    R(g, lx, -5 - lift + Math.round(sq * 0.3), 3, 4 , hi ? C.pantsHi : C.pants);
-    R(g, lx - (hi ? 0 : 0), -2 - lift, 4, 2, C.boot);
+  g.translate(Math.round(hx), Math.round(hy));
+  g.rotate(th);
+  if (scale !== 1) g.scale(scale, scale);
+  g.globalAlpha *= alpha;
+  g.drawImage(s, -6.5, -9);
+  g.restore();
+}
+
+// pose: { walkFrame, moving, onGround, blink, tail, axeAngle, axeOnBack, squash, lean, scarfA, faceS, mouth, smear, hand }
+export function drawHero(g, x, y, facing, pose, axe) {
+  const legs = !pose.onGround ? 'jump' : pose.moving ? ['a', 'stand', 'b', 'stand'][pose.walkFrame] : 'stand';
+  const spr = heroSprite(pose.blink ? 'blink' : 'open', legs, pose.tail ? 1 : 0, pose.mouth ? 'shout' : 'calm');
+  const sw = spr.width, sh = spr.height;
+  const bob = pose.moving && (pose.walkFrame === 1 || pose.walkFrame === 3) ? -1 : 0;
+  // squash and lean move the sprite by whole pixels (scaling a 1:1 sprite would smear it);
+  // only the paper-flip turn scales x, and only for the few frames of a turn
+  const sq = pose.squash || 0;
+  const dipY = sq > 0.6 ? 1 : sq < -0.6 ? -1 : 0;
+  const fs = pose.faceS ?? facing;
+  const flip = Math.abs(fs) < 0.12 ? 0.12 * Math.sign(fs || 1) : fs;
+  g.save();
+  g.imageSmoothingEnabled = false;
+  // contact shadow
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  const shw = 14 + (dipY > 0 ? 2 : 0);
+  g.fillRect(Math.round(x - shw / 2), Math.round(y), shw, 1);
+  const leanX = Math.round((pose.lean || 0) * 0.7) * Math.sign(fs || 1);
+  g.translate(Math.round(x) + leanX, Math.round(y) + 1 + dipY);
+  g.scale(Math.abs(flip) > 0.98 ? Math.sign(flip) : flip, 1);
+  const top = -sh + bob;
+  // scarf tail: four pixels trailing from the neck, outlined
+  const nx = -sw / 2 + 6, ny = top + 13.5;
+  const sa = pose.scarfA ?? 1.2;
+  for (const [col, ext] of [[OUTLINE, 1], ['#d8503e', 0]]) {
+    g.fillStyle = col;
+    for (let i = 1; i <= 4; i++) {
+      const a = sa + i * 0.1;
+      const px = nx - Math.cos(a) * i * 1.1, py = ny + Math.sin(a) * i * 1.1;
+      g.fillRect(Math.round(px - 0.5 - ext * 0.5), Math.round(py - 0.5 - ext * 0.5), 1 + ext, 1 + ext);
+    }
+  }
+  // hand: rests at the belt, rises over the head while winding up, drops forward on impact
+  const ang = pose.axeAngle ?? 0.6;
+  const up = Math.max(0, Math.min(1, (0.6 - ang) / 1.85));
+  const fwd = Math.max(0, Math.min(1, (ang - 0.6) / 0.9));
+  const hx = -sw / 2 + 14.5 - up * 5 + fwd * 2, hy = top + 14.5 - up * 11 + fwd * 1;
+  const tool = () => {
+    if (pose.axeOnBack) { drawAxe(g, -4, top + 15, -2.5, axe, 0.9); return; }
+    if (pose.smear > 0.15) for (let i = 1; i <= 3; i++) drawAxe(g, hx, hy, ang - 0.36 * i * pose.smear, axe, 1, 0.3 - i * 0.08);
+    drawAxe(g, hx, hy, ang, axe);
   };
-  leg(-4, Math.round(pose.legL || 0), false);
-  leg(1, Math.round(pose.legR || 0), true);
-  // back axe (stowed)
-  if (pose.axeOnBack) drawAxe(g, -5 + lean, bodyY + 6, -0.5, axe, 0.85);
-  // back arm
-  const armY = bodyY + 3;
-  R(g, -5 + lean, armY + Math.round(pose.armL || 0), 2, 5, C.vest);
-  R(g, -5 + lean, armY + 4 + Math.round(pose.armL || 0), 2, 2, C.skinShade);
-  // body
-  R(g, -4 + lean, bodyY + 1, 8, 8, C.shirt);
-  R(g, -4 + lean, bodyY + 1, 3, 7, C.vest); R(g, 2 + lean, bodyY + 1, 2, 7, C.vest);
-  R(g, -4 + lean, bodyY + 1, 1, 7, C.vestHi);
-  R(g, -4 + lean, bodyY + 7, 8, 1, C.belt); R(g, 0 + lean, bodyY + 7, 2, 1, C.buckle);
-  R(g, -5 + lean, bodyY + 1, 1, 8, C.ink); R(g, 4 + lean, bodyY + 1, 1, 8, C.ink);
-  // scarf, its tail trails behind with motion
-  const sc = pose.scarf || 0;
-  R(g, -4 + lean, bodyY, 8, 2, C.scarf); R(g, -3 + lean, bodyY, 5, 1, C.scarfHi);
-  R(g, -6 + lean - Math.round(sc), bodyY + 1 + Math.round(Math.abs(sc) * 0.3), 3, 2, C.scarf);
-  R(g, -8 + lean - Math.round(sc * 1.6), bodyY + 2 + Math.round(Math.abs(sc) * 0.4), 2, 1, C.scarfHi);
-  // head (big, chibi)
-  const hx = -7 + lean + Math.round(pose.look || 0), hy = bodyY - 12;
-  R(g, hx + 1, hy, 12, 13, C.ink);
-  R(g, hx, hy + 1, 14, 11, C.ink);
-  R(g, hx + 1, hy + 1, 12, 11, C.skin);
-  R(g, hx + 1, hy + 9, 12, 2, C.skinShade);
-  // hair and cap
-  R(g, hx + 1, hy + 1, 12, 4, C.hair);
-  R(g, hx + 1, hy + 5, 2, 4, C.hair); R(g, hx + 11, hy + 5, 2, 3, C.hair);
-  R(g, hx + 9, hy + 5, 2, 1, C.hairHi);
-  R(g, hx + 1, hy - 1, 12, 4, C.cap); R(g, hx + 2, hy - 2, 10, 1, C.cap);
-  R(g, hx + 3, hy - 1, 5, 1, C.capHi);
-  R(g, hx + 1, hy + 2, 12, 1, C.capDark);
-  R(g, hx + 0, hy + 1, 1, 2, C.ink); R(g, hx + 13, hy + 1, 1, 2, C.ink);
-  R(g, hx + 2, hy - 3, 10, 1, C.ink);
-  R(g, hx + 9, hy - 4, 2, 2, C.leaf); R(g, hx + 11, hy - 5, 1, 1, C.leaf);
-  // face: eyes look forward
-  if (pose.blink) { R(g, hx + 7, hy + 7, 2, 1, C.eye); R(g, hx + 11, hy + 7, 2, 1, C.eye); }
-  else {
-    R(g, hx + 7, hy + 6, 2, 3, C.eye); R(g, hx + 11, hy + 6, 2, 3, C.eye);
-    R(g, hx + 7, hy + 6, 1, 1, C.eyeHi); R(g, hx + 11, hy + 6, 1, 1, C.eyeHi);
-  }
-  R(g, hx + 6, hy + 9, 2, 1, C.cheek); R(g, hx + 12, hy + 9, 1, 1, C.cheek);
-  if (pose.mouth) R(g, hx + 9, hy + 10, 2, 1, C.ink);
-  // axe in hands, then front arm over it
-  const ax = 2 + lean, ay = bodyY + 2;
-  let handX = ax + 2, handY = ay + 5 + Math.round(pose.armR || 0);
-  if (!pose.axeOnBack) {
-    const th = pose.axeAngle ?? 0.7;
-    handX = Math.round(ax + 1 + Math.sin(th) * 5);
-    handY = Math.round(ay + 2 - Math.cos(th) * 5);
-    drawAxe(g, handX, handY, th, axe);
-  }
-  // front arm from shoulder to hand
-  const sx = ax, sy = ay;
-  const steps = Math.max(Math.abs(handX - sx), Math.abs(handY - sy), 1);
-  g.fillStyle = C.vest;
-  for (let i = 0; i <= steps; i++) g.fillRect(Math.round(sx + ((handX - sx) * i) / steps), Math.round(sy + ((handY - sy) * i) / steps), 2, 2);
-  R(g, handX, handY, 2, 2, C.skin);
+  const behind = pose.axeOnBack || ang < -0.35;
+  if (behind) tool();
+  g.drawImage(spr, -sw / 2, top);
+  if (!behind) tool();
   g.restore();
 }

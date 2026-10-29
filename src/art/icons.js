@@ -56,16 +56,16 @@ export function itemIcon(id) {
 }
 
 export function axeIcon(id, locked = false) {
-  return icon('a:' + id + (locked ? ':l' : ''), 16, (g) => {
+  return icon('a:' + id + (locked ? ':l' : ''), 13, (g) => {
     const a = AXE_BY_ID[id];
     const gr = GRADES[a.grade];
     const look = locked ? { blade: '#2a3a3a', accent: '#1a2626' } : { blade: a.blade, accent: '#a87a4a' };
-    drawAxe(g, 2, 14, 0.78, look, 1.1);
+    drawAxe(g, 3, 12, 0.38, look);
     if (!locked && a.grade >= 5) {
       // grade sparkles around the head
       g.fillStyle = gr.color;
-      for (const [x, y] of [[14, 1], [15, 2], [13, 2], [14, 3], [2, 3]]) g.fillRect(x, y, 1, 1);
-      if (a.grade >= 9) { g.fillStyle = '#ffffff'; g.fillRect(14, 2, 1, 1); g.fillRect(6, 1, 1, 1); }
+      for (const [x, y] of [[11, 0], [12, 1], [10, 1], [11, 2], [1, 2]]) g.fillRect(x, y, 1, 1);
+      if (a.grade >= 9) { g.fillStyle = '#ffffff'; g.fillRect(11, 1, 1, 1); g.fillRect(4, 0, 1, 1); }
     }
   });
 }

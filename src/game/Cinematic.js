@@ -36,15 +36,15 @@ export class Cinematic {
     g.elderGlow = t < 2.8 ? 0 : t < 3.8 ? smooth((t - 2.8) / 0.8) : 1 - smooth((t - 3.8) / 0.7) * 0.6;
     // hero: looks around, then draws the axe
     p.locked = true;
+    p.stowed = t < 2.25;
     p.facing = t < 2.15 ? -1 : 1;
-    if (t > 1.95 && t < 2.15) p.pose.look = -1;
     if (t >= 2.25 && t < 2.85) { p.cheerT = 0; p.forceAxe = smooth((t - 2.25) / 0.45); }
     if (t >= 2.85) p.surpriseT = Math.max(p.surpriseT, t < 3.7 ? 0.1 : 0);
     this.cue('wind', 0.05, () => g.audio.play('swell'));
     this.cue('pollen', 0.9, () => { for (let i = 0; i < 26; i++) g.particles.spawn(g.cam.x + Math.random() * W, g.cam.y + 40 + Math.random() * 120, 4 + Math.random() * 6, -2 - Math.random() * 4, 3, '#f8f0c0', { glow: 0.5, drag: 0.1 }); });
     this.cue('flock', 1.0, () => { g.ambient.flock = { x: 40, y: 40, t: 0 }; });
     this.cue('draw', 2.3, () => g.audio.play('whoosh'));
-    this.cue('glint', 2.72, () => { g.renderer.flash(p.x + 8, p.y - 22, 26, 'white', 0.25); g.audio.play('chime'); });
+    this.cue('glint', 2.72, () => { g.renderer.flash(p.x + 8, p.y - 18, 26, 'white', 0.25); g.audio.play('chime'); });
     this.cue('wake', 2.85, () => { g.audio.play('rare'); });
     if (t > 2.85 && t < 3.9 && Math.random() < dt * 40) {
       const ex = g.stationX('elder') + (Math.random() - 0.5) * 70;
@@ -60,6 +60,7 @@ export class Cinematic {
     const g = this.g;
     g.player.locked = false;
     g.player.forceAxe = 0;
+    g.player.stowed = false;
     g.rayBoost = 1;
     g.elderGlow = 0;
     g.onCinematicEnd();

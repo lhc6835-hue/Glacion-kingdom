@@ -23,6 +23,8 @@ export class Player {
     this.pose = {};
     this.locked = false; // cinematic / UI control
     this.forceAxe = 0;   // cinematic: drawing the axe (0..1)
+    this.stowed = false; // cinematic: axe still on the back
+    this.faceS = 1; this.scarf = 1.2; this.scarfV = 0;
   }
 
   update(dt, input, combat, events) {
@@ -63,6 +65,11 @@ export class Player {
     for (const k of ['turnT', 'landT', 'gatherT', 'cheerT', 'surpriseT']) this[k] = Math.max(0, this[k] - dt);
     this.blinkT -= dt;
     if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 3;
+    // paper-flip turn and a scarf on a spring: hangs down at rest, streams back when running
+    this.faceS += (this.facing - this.faceS) * Math.min(1, dt * 20);
+    const sTgt = 1.25 + (0.12 - 1.25) * Math.min(1, speed / RUN) + (this.onGround ? 0 : this.vy < 0 ? 0.5 : -0.45);
+    this.scarfV += ((sTgt - this.scarf) * 90 - this.scarfV * 7) * dt;
+    this.scarf += this.scarfV * dt;
     this.computePose(combat, speed, run);
   }
 
@@ -74,46 +81,36 @@ export class Player {
     const p = this.pose;
     const t = performance.now() / 1000;
     p.blink = this.blinkT < 0;
-    p.axeOnBack = !combat.target && !combat.swing && this.cheerT <= 0;
-    p.bob = 0; p.legL = 0; p.legR = 0; p.armL = 0; p.armR = 0; p.lean = 0; p.squash = 0; p.look = 0; p.mouth = false;
-    p.scarf = Math.max(-3, Math.min(3, this.vx / 30)) * this.facing + Math.sin(t * 3) * 0.4;
-    if (!this.onGround) {
-      p.squash = this.vy < 0 ? -1 : 0;
-      p.legL = 2; p.legR = 1; p.armL = -2;
-    } else if (speed > 4) {
-      const s = Math.sin(this.walkPhase);
-      const amp = run ? 3 : 2;
-      p.legL = Math.max(0, s) * amp; p.legR = Math.max(0, -s) * amp;
-      p.bob = -Math.abs(Math.cos(this.walkPhase)) * (run ? 1.5 : 1) + 0.5;
-      p.armL = s * 1.5;
-      p.lean = run ? 1 : 0;
-    } else {
-      p.bob = Math.sin(t * 2.2) > 0.6 ? 1 : 0; // slow breathing
+    p.onGround = this.onGround;
+    p.moving = this.onGround && speed > 8;
+    p.walkFrame = Math.floor(this.walkPhase / 1.1) % 4;
+    p.tail = !p.moving && Math.floor(t * 2.5) % 2 === 1;
+    p.faceS = this.faceS;
+    p.scarfA = this.scarf;
+    p.axeOnBack = this.stowed;
+    p.axeAngle = 0.6 + (p.moving ? Math.sin(this.walkPhase * 1.4) * 0.14 : Math.sin(t * 3.2) * 0.04) + (this.onGround ? 0 : -0.35);
+    p.lean = this.onGround ? Math.max(-1, Math.min(1, this.vx / RUN)) * 1.2 : 0;
+    p.squash = 0; p.mouth = false; p.smear = 0;
+    if (!this.onGround) p.squash = this.vy < 0 ? -1.2 : 0.4;
+    if (this.landT > 0) p.squash = 2.2 * (this.landT / 0.14);
+    if (this.gatherT > 0) p.squash = 1.5;
+    if (this.surpriseT > 0) p.mouth = true;
+    const s = combat.swing;
+    if (s) {
+      const w = SWING.windup, k = SWING.strike, f = SWING.follow;
+      const miss = s.j === 'miss', crit = s.j === 'crit';
+      const endA = miss ? 2.3 : 1.75, over = miss ? 0.35 : 0.08;
+      if (s.t < w) { const u = easeOut(s.t / w); p.axeAngle = lerp(0.6, -1.15, u); p.lean = -u; p.squash = -0.8 * u; }
+      else if (s.t < w + k) { const u = easeIn((s.t - w) / k); p.axeAngle = lerp(-1.15, endA, u); p.lean = lerp(-1, 1.5, u); p.smear = u; }
+      else if (s.t < w + k + f) {
+        const u = easeOut((s.t - w - k) / f);
+        p.axeAngle = lerp(endA, endA + over, u); p.lean = 1.5; p.squash = crit ? 1.6 : 0.9; p.mouth = crit;
+      } else {
+        const u = easeInOut(Math.min(1, (s.t - w - k - f) / (s.total - w - k - f)));
+        p.axeAngle = lerp(endA + over, 0.6, u); p.lean = lerp(1.5, 0, u);
+      }
     }
-    if (this.turnT > 0) p.squash = 1;
-    if (this.landT > 0) p.squash = 2 * (this.landT / 0.14);
-    if (this.gatherT > 0) { p.squash = 2; p.lean = 1; }
-    if (this.surpriseT > 0) { p.bob = -2; p.mouth = true; }
-    if (combat.target || combat.swing) {
-      p.axeAngle = 0.7;
-      p.legL = 0; p.legR = 0;
-      const s = combat.swing;
-      if (s) {
-        const w = SWING.windup, k = SWING.strike, f = SWING.follow;
-        const miss = s.j === 'miss', crit = s.j === 'crit';
-        const endA = miss ? 2.25 : 1.45;
-        if (s.t < w) { const u = easeOut(s.t / w); p.axeAngle = lerp(0.7, -1.25, u); p.lean = -1; p.squash = -1 * u; }
-        else if (s.t < w + k) { const u = easeIn((s.t - w) / k); p.axeAngle = lerp(-1.25, endA, u); p.lean = lerp(-1, 2, u); }
-        else if (s.t < w + k + f) {
-          const u = easeOut((s.t - w - k) / f); p.axeAngle = lerp(endA, endA + (miss ? 0.35 : 0.12), u);
-          p.lean = 2; p.squash = crit ? 2 : 1; p.legR = miss ? 1 : 0; p.mouth = crit;
-        } else {
-          const u = easeInOut(Math.min(1, (s.t - w - k - f) / (s.total - w - k - f)));
-          p.axeAngle = lerp(endA + (miss ? 0.35 : 0.12), 0.7, u); p.lean = lerp(2, 0, u);
-        }
-      } else p.bob = Math.sin(t * 3) > 0.3 ? 1 : 0;
-    }
-    if (this.forceAxe > 0) { p.axeOnBack = false; p.axeAngle = lerp(-2.6, 0.7, this.forceAxe); p.lean = this.forceAxe < 0.5 ? -1 : 0; }
-    if (this.cheerT > 0) { p.axeAngle = -0.15; p.axeOnBack = false; p.bob = -Math.round(Math.abs(Math.sin(this.cheerT * 10)) * 3); p.mouth = true; }
+    if (this.forceAxe > 0) { p.axeOnBack = false; p.axeAngle = lerp(-2.4, 0.6, this.forceAxe); }
+    if (this.cheerT > 0) { p.axeAngle = -0.1; p.axeOnBack = false; p.squash = -Math.abs(Math.sin(this.cheerT * 10)) * 1.5; p.mouth = true; }
   }
 }

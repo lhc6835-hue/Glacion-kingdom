@@ -321,7 +321,7 @@ export class Renderer {
     const p = f.player;
     const axe = AXE_BY_ID[f.equipped];
     drawHero(g, p.x - camX, p.y - camY, p.facing, p.pose, axe);
-    if (p.surpriseT > 0) { g.fillStyle = '#fff4c0'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 38, 2, 5); g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 31, 2, 2); }
+    if (p.surpriseT > 0) { g.fillStyle = '#fff4c0'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 28, 2, 5); g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY) - 21, 2, 2); }
   }
 
   frontTufts(g, f, camX, camY, t) {
