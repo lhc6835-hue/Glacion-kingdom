@@ -1,242 +1,216 @@
-import { canvas, rgb, mix, shade, rng, blob, wobble, dabs } from './paint.js';
+// Procedural pixel-art trees. Each tree is a trunk sprite plus several canopy pieces that sway
+// independently by whole pixels, so the silhouette stays crisp while the crown moves.
+import { PixBuf } from '../gfx/PixBuf.js';
+import { mulberry32, hash2 } from '../core/Rng.js';
+import { PAL } from './palette.js';
+import { TREES } from '../data/trees.js';
 
-// Procedural painted trees and plants. Every call with a different seed yields a different
-// silhouette; species differ in structure, not just colour.
+const TAU = Math.PI * 2;
+const LIGHT = [-0.62, -0.78]; // towards the key light (upper left)
 
-export const PALETTES = {
-  oak:      { dark: [0.10, 0.27, 0.22], mid: [0.25, 0.50, 0.26], light: [0.52, 0.73, 0.30], hi: [0.82, 0.92, 0.48], trunk: [0.36, 0.25, 0.18] },
-  spring:   { dark: [0.20, 0.40, 0.20], mid: [0.45, 0.68, 0.28], light: [0.70, 0.85, 0.38], hi: [0.92, 0.97, 0.60], trunk: [0.42, 0.31, 0.22] },
-  deep:     { dark: [0.06, 0.19, 0.20], mid: [0.13, 0.35, 0.30], light: [0.27, 0.52, 0.36], hi: [0.50, 0.70, 0.44], trunk: [0.26, 0.19, 0.15] },
-  blossom:  { dark: [0.60, 0.28, 0.45], mid: [0.92, 0.54, 0.70], light: [1.00, 0.77, 0.85], hi: [1.00, 0.94, 0.96], trunk: [0.36, 0.24, 0.22] },
-  magenta:  { dark: [0.42, 0.10, 0.36], mid: [0.72, 0.22, 0.58], light: [0.90, 0.45, 0.75], hi: [1.00, 0.72, 0.90], trunk: [0.30, 0.20, 0.20] },
-  autumn:   { dark: [0.48, 0.12, 0.10], mid: [0.86, 0.33, 0.14], light: [0.98, 0.58, 0.20], hi: [1.00, 0.84, 0.42], trunk: [0.32, 0.22, 0.17] },
-  gold:     { dark: [0.45, 0.33, 0.10], mid: [0.80, 0.62, 0.18], light: [0.96, 0.82, 0.34], hi: [1.00, 0.95, 0.62], trunk: [0.36, 0.27, 0.19] },
-  pine:     { dark: [0.05, 0.18, 0.17], mid: [0.12, 0.32, 0.26], light: [0.25, 0.47, 0.32], hi: [0.45, 0.64, 0.40], trunk: [0.30, 0.21, 0.16] },
-};
-
-// Broadleaf: a trunk with forks and a canopy built from overlapping leaf clumps,
-// shaded in four tones so each clump reads as lit from the upper left.
-export function paintBroadleaf(seed, { ppm = 20, height = 9, width = 7, palette = PALETTES.oak, trunkFrac = 0.42, shape = 'round' } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H);
-  const ctx = c.getContext('2d');
-  const P = palette;
-  const cx = W / 2;
-
-  // Trunk and branches.
-  const trunkTop = H * (1 - trunkFrac);
-  const tw = Math.max(3, width * ppm * r.range(0.07, 0.1));
-  const lean = r.range(-0.08, 0.08) * W;
-  drawTrunk(ctx, r, cx, H, cx + lean, trunkTop, tw, P.trunk);
-  const forks = r.int(2, 4);
-  for (let i = 0; i < forks; i++) {
-    const a = -Math.PI / 2 + r.range(-0.9, 0.9);
-    const len = H * r.range(0.12, 0.22);
-    const sx = cx + lean * 0.8, sy = trunkTop + r.range(0, H * 0.08);
-    drawTrunk(ctx, r, sx, sy, sx + Math.cos(a) * len, sy + Math.sin(a) * len, tw * 0.45, P.trunk);
+// clusters: { kind:'blob', x, y, r } or { kind:'tri', x, y, w, h }, each with a piece index.
+function inCluster(c, x, y, seed) {
+  if (c.kind === 'blob') {
+    const dx = x - c.x, dy = y - c.y;
+    const d = Math.hypot(dx, dy);
+    const a = Math.floor(((Math.atan2(dy, dx) + Math.PI) / TAU) * 20);
+    const jag = 1 + (c.jag ?? 0.22) * (hash2(a, c.id, seed) - 0.5) + 0.12 * (hash2(x, y, seed + 9) - 0.5);
+    const r = c.r * jag;
+    return d < r ? { depth: (r - d) / r, nx: dx / r, ny: dy / r } : null;
   }
+  // tri: pine tier with a ragged, drooping lower edge
+  const t = (y - c.y) / c.h;
+  if (t < 0 || t > 1.12) return null;
+  const sag = 2.5 * hash2(Math.floor(x / 2), c.id, seed) + 1.5 * Math.abs(x - c.x) / c.w;
+  if (y > c.y + c.h + sag - 2.5) return null;
+  const half = c.w * Math.pow(Math.min(1, t), 0.85) + 1.2 * (hash2(y, c.id, seed + 3) - 0.5) * 2;
+  const dx = x - c.x;
+  if (Math.abs(dx) > half) return null;
+  return { depth: 1 - Math.abs(dx) / Math.max(1, half), nx: dx / c.w, ny: t * 1.4 - 0.7 };
+}
 
-  // Canopy clumps.
-  const can = canvas(W, H);
-  const cc = can.getContext('2d');
-  const ccx = cx + lean * 0.7;
-  const ccy = shape === 'tall' ? H * 0.40 : H * 0.36;
-  const rx = W * 0.45, ry = (shape === 'tall' ? H * 0.38 : H * 0.33);
-  const clumps = [];
-  const n = shape === 'wide' ? r.int(16, 22) : r.int(12, 18);
-  for (let i = 0; i < n; i++) {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.78;
-    let x = ccx + Math.cos(a) * rx * d, y = ccy + Math.sin(a) * ry * d;
-    const rr = Math.min(W, H) * r.range(0.13, 0.22);
-    // Keep clumps inside the sprite.
-    x = Math.min(W - rr, Math.max(rr, x)); y = Math.min(H * 0.8, Math.max(rr, y));
-    clumps.push({ x, y, r: rr });
+function paintCanopy(W, H, clusters, pal, seed, opts = {}) {
+  const pieces = Math.max(...clusters.map((c) => c.piece)) + 1;
+  const tone = new Int8Array(W * H).fill(-1);
+  const member = new Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let best = null, bestD = -1, mem = 0;
+    for (const c of clusters) {
+      const r = inCluster(c, x, y, seed);
+      if (!r) continue;
+      mem |= 1 << c.piece;
+      if (r.depth > bestD) { bestD = r.depth; best = r; }
+    }
+    if (!best) continue;
+    member[y * W + x] = mem;
+    let s = -(best.nx * LIGHT[0] + best.ny * LIGHT[1]) * 0.75 + (1 - best.depth) * 0.12 - 0.05;
+    s += (hash2(x, y, seed) - 0.5) * 0.42;
+    s += (y / H - 0.45) * -0.35; // crowns are lighter on top
+    let k = s > 0.58 ? 4 : s > 0.18 ? 3 : s > -0.25 ? 2 : 1;
+    // leaf clumps: short bright dashes and dark notches
+    const h = hash2(x >> 1, y, seed + 5);
+    if (k >= 2 && h < 0.1) k++;
+    else if (h > 0.93) k--;
+    tone[y * W + x] = Math.max(1, Math.min(5, k));
   }
-  clumps.sort((a, b) => b.y - a.y); // paint from the bottom up so upper clumps overlap lower ones
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? -1 : tone[y * W + x]);
+  const out = [];
+  for (let p = 0; p < pieces; p++) out.push(new PixBuf(W, H));
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let k = tone[y * W + x];
+    if (k < 0) continue;
+    const edge = at(x - 1, y) < 0 || at(x + 1, y) < 0 || at(x, y - 1) < 0 || at(x, y + 1) < 0;
+    if (edge) {
+      // sun-facing rim gets the brightest tone, the rest is inked
+      k = at(x - 1, y - 1) < 0 && at(x, y + 1) >= 0 && (at(x - 1, y) < 0 || at(x, y - 1) < 0) ? Math.min(5, k + 2) : 0;
+      if (opts.softEdge && k === 0 && hash2(x, y, seed + 11) < 0.4) k = 1;
+    }
+    const col = pal[k];
+    const mem = member[y * W + x];
+    for (let p = 0; p < pieces; p++) if (mem & (1 << p)) out[p].set(x, y, col);
+  }
+  return out.map((b) => b.toCanvas());
+}
 
-  for (const k of clumps) wobble(cc, k.x, k.y, k.r, r, { points: 16, jitter: 0.18, color: rgb(P.dark) });
-  // Leafy fringe on the silhouette.
-  for (const k of clumps) {
-    for (let i = 0; i < 26; i++) {
-      const a = r() * Math.PI * 2;
-      const x = k.x + Math.cos(a) * k.r * r.range(0.85, 1.08), y = k.y + Math.sin(a) * k.r * r.range(0.85, 1.08);
-      blob(cc, x, y, ppm * r.range(0.12, 0.22), ppm * r.range(0.08, 0.14), rgb(P.dark), a);
+function paintTrunk(buf, ax, baseY, topY, wBase, wTop, pal, seed, opts = {}) {
+  const rnd = mulberry32(seed);
+  const lean = (rnd() - 0.5) * 3;
+  for (let y = topY; y <= baseY; y++) {
+    const t = (y - topY) / Math.max(1, baseY - topY);
+    let w = wTop + (wBase - wTop) * t;
+    if (baseY - y < 4) w += (4 - (baseY - y)) * 1.1; // root flare
+    const cx = ax + lean * (1 - t);
+    const x0 = Math.round(cx - w / 2), x1 = Math.round(cx + w / 2);
+    for (let x = x0; x <= x1; x++) {
+      const u = (x - x0) / Math.max(1, x1 - x0);
+      let k = u < 0.22 ? 4 : u < 0.5 ? 3 : u < 0.8 ? 2 : 1;
+      if (x === x0 || x === x1) k = 0;
+      const streak = hash2(x, Math.floor(y / 3), seed);
+      if (k > 0 && streak < 0.16) k = Math.max(1, k - 1);
+      if (opts.birch) {
+        // white bark with dark lenticels
+        k = x === x0 || x === x1 ? 0 : u < 0.3 ? 4 : u < 0.75 ? 3 : 2;
+        if (hash2(Math.floor(x / 2), y, seed + 2) < 0.08 || (hash2(0, Math.floor(y / 2), seed) < 0.12 && u > 0.15 && u < 0.85)) k = 0;
+      }
+      buf.set(x, y, pal[Math.min(pal.length - 1, k)]);
+    }
+    // moss creeping up the shaded side
+    if (opts.moss && baseY - y < opts.moss && hash2(x1, y, seed + 4) < 0.7) buf.set(x1 - 1, y, PAL.moss[2 + (hash2(y, 1, seed) < 0.3 ? 1 : 0)]);
+  }
+  // roots
+  for (let i = -1; i <= 1; i += 2) for (let k = 0; k < 3 + wBase / 3; k++) buf.set(Math.round(ax + i * (wBase / 2 + 1 + k)), baseY - (k < 2 ? 1 : 0), pal[1]);
+  return lean;
+}
+
+function branch(buf, x, y, dx, dy, len, pal) {
+  for (let i = 0; i < len; i++) {
+    const px = Math.round(x + dx * i), py = Math.round(y + dy * i);
+    buf.set(px, py, pal[2]); buf.set(px, py + 1, pal[0]);
+  }
+}
+
+// Builds every sprite part of one tree. Anchor (ax, ay) is the trunk base.
+export function buildTree(species, seed) {
+  const a = TREES[species].art;
+  const rnd = mulberry32(seed);
+  const s = 0.9 + rnd() * 0.18; // per-tree size variation
+  const H = Math.round(a.h * s) + 4, W = Math.round(a.w * s) + 10;
+  const ax = Math.floor(W / 2), ay = H - 2;
+  const trunk = new PixBuf(W, H);
+  const clusters = [];
+  let pal, id = 0;
+  const blob = (x, y, r, piece, jag) => clusters.push({ kind: 'blob', x, y, r, piece, jag, id: id++ });
+
+  if (a.kind === 'pine' || a.kind === 'mossheart') {
+    pal = a.kind === 'mossheart' ? ['#0c2420', '#163d30', '#22573c', '#3a7a4a', '#6aa858', '#b0dc7a'] : PAL.pine;
+    const top = 2, crownBottom = ay - Math.round(a.h * s * 0.22);
+    paintTrunk(trunk, ax, ay, top + 8, a.trunk * s, 2, PAL.bark, seed, { moss: a.kind === 'mossheart' ? 30 : 8 });
+    const tiers = a.kind === 'mossheart' ? 6 : 5;
+    const span = crownBottom - top;
+    for (let i = 0; i < tiers; i++) {
+      const ty = top + Math.round((span * i) / (tiers + 0.6));
+      const th = Math.round(span / tiers) + 8;
+      const tw = (W / 2 - 3) * (0.32 + 0.68 * ((i + 1) / tiers)) * (0.92 + rnd() * 0.12);
+      clusters.push({ kind: 'tri', x: ax + (rnd() - 0.5) * 2, y: ty, w: tw, h: th, piece: Math.min(3, Math.floor((tiers - 1 - i) / 1.5)), id: id++ });
+    }
+  } else if (a.kind === 'birch') {
+    pal = PAL.birch;
+    paintTrunk(trunk, ax, ay, Math.round(H * 0.28), a.trunk * s, 2, PAL.birchBark, seed, { birch: true });
+    branch(trunk, ax, Math.round(H * 0.45), -0.9, -0.6, 9, PAL.birchBark);
+    branch(trunk, ax + 1, Math.round(H * 0.38), 0.9, -0.7, 8, PAL.birchBark);
+    const cy = H * 0.3;
+    blob(ax, cy - 6, W * 0.26, 0);
+    blob(ax - W * 0.24, cy + 4, W * 0.2, 1);
+    blob(ax + W * 0.24, cy + 2, W * 0.21, 2);
+    blob(ax - W * 0.08, cy - H * 0.16, W * 0.18, 3);
+    blob(ax + W * 0.12, cy + 10, W * 0.17, 1);
+  } else if (a.kind === 'silver') {
+    pal = PAL.silver;
+    paintTrunk(trunk, ax, ay, Math.round(H * 0.35), a.trunk * s, 3, PAL.silverBark, seed, { moss: 10 });
+    branch(trunk, ax - 1, Math.round(H * 0.5), -1, -0.5, 12, PAL.silverBark);
+    branch(trunk, ax + 1, Math.round(H * 0.46), 1, -0.55, 11, PAL.silverBark);
+    const cy = H * 0.34;
+    blob(ax, cy - 4, W * 0.27, 0, 0.3);
+    blob(ax - W * 0.27, cy + 6, W * 0.19, 1, 0.3);
+    blob(ax + W * 0.28, cy + 4, W * 0.2, 2, 0.3);
+    blob(ax - W * 0.1, cy - H * 0.17, W * 0.2, 3, 0.3);
+    blob(ax + W * 0.16, cy - H * 0.12, W * 0.16, 3, 0.3);
+    blob(ax, cy + 10, W * 0.22, 1, 0.3);
+  } else {
+    pal = PAL.leafDeep;
+    paintTrunk(trunk, ax, ay, Math.round(H * 0.42), a.trunk * s, 2, PAL.bark, seed, { moss: 4 });
+    const cy = H * 0.36;
+    blob(ax, cy, W * 0.36, 0);
+    blob(ax - W * 0.2, cy + 5, W * 0.24, 1);
+    blob(ax + W * 0.2, cy + 4, W * 0.25, 2);
+    blob(ax + 1, cy - H * 0.13, W * 0.24, 2);
+  }
+  const pieces = paintCanopy(W, H, clusters, pal, seed, { softEdge: a.kind === 'silver' }).map((c, i) => ({ c, amp: 0.4 + i * 0.35, phase: rnd() * TAU }));
+  // sparkle pixels on silverleaf, pulsing glow spots on mossheart (drawn by the renderer)
+  const sparkles = [];
+  if (a.kind === 'silver') for (let i = 0; i < 14; i++) sparkles.push({ x: Math.round(ax + (rnd() - 0.5) * W * 0.8), y: Math.round(H * (0.12 + rnd() * 0.4)), p: rnd() * TAU });
+  const glow = a.kind === 'mossheart' ? { x: ax, y: Math.round(ay - a.h * s * 0.3) } : null;
+  return { W, H, ax, ay, trunk: trunk.toCanvas(), pieces, sparkles, glow, stump: buildStump(a.trunk * s, a.kind, seed), logColor: pal[3] };
+}
+
+function buildStump(w, kind, seed) {
+  const W = Math.round(w) + 10, H = 9;
+  const b = new PixBuf(W, H);
+  const pal = kind === 'birch' ? PAL.birchBark : kind === 'silver' ? PAL.silverBark : PAL.bark;
+  paintTrunk(b, W / 2, H - 2, 3, w, w * 0.9, pal, seed, { birch: kind === 'birch' });
+  // cut face
+  for (let x = Math.round(W / 2 - w / 2) + 1; x < W / 2 + w / 2; x++) { b.set(x, 3, '#c9a77a'); b.set(x, 2, '#e0c49a'); }
+  return { c: b.toCanvas(), W, H };
+}
+
+// Silhouette trees for the parallax strips: two tones, no sway pieces.
+export function silhouetteTree(b, x, baseY, h, kind, cols, seed) {
+  const rnd = mulberry32(seed);
+  const tw = Math.max(1, Math.round(h / 28));
+  for (let y = baseY - Math.round(h * 0.5); y <= baseY; y++) for (let i = -tw; i <= tw; i++) b.set(x + i, y, cols[0]);
+  if (kind === 'pine') {
+    const tiers = 4 + Math.floor(rnd() * 2);
+    for (let t = 0; t < tiers; t++) {
+      const ty = baseY - h + (h * 0.78 * t) / tiers;
+      const th = (h * 0.78) / tiers + h * 0.12;
+      const w = h * 0.12 + (h * 0.24 * (t + 1)) / tiers;
+      for (let y = 0; y < th; y++) {
+        const half = w * (y / th) + (hash2(y, t, seed) - 0.5) * 2;
+        for (let i = -Math.round(half); i <= Math.round(half); i++) {
+          const lit = i < -half * 0.3 && hash2(x + i, y, seed) < 0.5;
+          b.set(x + i, Math.round(ty + y), lit ? cols[1] : cols[0]);
+        }
+      }
+    }
+  } else {
+    const n = 3 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const cx = x + (rnd() - 0.5) * h * 0.4, cy = baseY - h * (0.55 + rnd() * 0.3), r = h * (0.16 + rnd() * 0.12);
+      for (let y = -r; y <= r; y++) for (let i = -r; i <= r; i++) {
+        if (i * i + y * y > r * r * (0.85 + hash2(i, y, seed + k) * 0.3)) continue;
+        const lit = i + y < -r * 0.5 && hash2(i, y, seed) < 0.6;
+        b.set(Math.round(cx + i), Math.round(cy + y), lit ? cols[1] : cols[0]);
+      }
     }
   }
-  cc.globalCompositeOperation = 'source-atop';
-  // Each clump: mid tone shifted toward the light, then light, then highlight dabs.
-  for (const k of clumps) {
-    const ox = -k.r * 0.18, oy = -k.r * 0.2;
-    wobble(cc, k.x + ox, k.y + oy, k.r * 0.86, r, { points: 14, jitter: 0.2, color: rgb(mix(P.dark, P.mid, 0.85)) });
-  }
-  for (const k of clumps) {
-    const lightness = 1 - (k.y - (ccy - ry)) / (ry * 2); // upper clumps are lighter
-    const lx = k.x - k.r * 0.32, ly = k.y - k.r * 0.36;
-    wobble(cc, lx, ly, k.r * 0.55, r, { points: 12, jitter: 0.25, color: rgb(mix(P.mid, P.light, 0.5 + lightness * 0.5)) });
-    dabs(cc, r, 22, (rr) => [lx + (rr() - 0.5) * k.r * 1.1, ly + (rr() - 0.5) * k.r * 0.9],
-      (p, rr) => rgb(rr() < 0.5 ? P.light : P.hi, 0.85), { size: [ppm * 0.06, ppm * 0.14], stretch: 1.7 });
-  }
-  // Shadowed pockets and a few deep holes between clumps.
-  dabs(cc, r, 14, (rr) => {
-    const k = clumps[Math.floor(rr() * clumps.length)];
-    return [k.x + k.r * rr.range(0.1, 0.7), k.y + k.r * rr.range(0.2, 0.8)];
-  }, () => rgb(shade(P.dark, 0.85), 0.35), { size: [ppm * 0.06, ppm * 0.12] });
-  cc.globalCompositeOperation = 'source-over';
-  ctx.drawImage(can, 0, 0);
-  return c;
-}
-
-function drawTrunk(ctx, r, x0, y0, x1, y1, w, color) {
-  const mx = (x0 + x1) / 2 + r.range(-0.15, 0.15) * Math.abs(y1 - y0), my = (y0 + y1) / 2;
-  const g = ctx.createLinearGradient(x0 - w, 0, x0 + w, 0);
-  g.addColorStop(0, `rgb(${color.map((v) => Math.min(255, v * 255 * 1.35) | 0).join(',')})`);
-  g.addColorStop(0.55, rgb(color));
-  g.addColorStop(1, rgb(shade(color, 0.55)));
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(x0 - w * 0.75, y0);
-  ctx.quadraticCurveTo(mx - w * 0.4, my, x1 - w * 0.18, y1);
-  ctx.lineTo(x1 + w * 0.18, y1);
-  ctx.quadraticCurveTo(mx + w * 0.4, my, x0 + w * 0.75, y0);
-  ctx.closePath();
-  ctx.fill();
-  // Root flare.
-  if (y0 > y1) {
-    blob(ctx, x0, y0 - w * 0.15, w * 1.1, w * 0.3, rgb(shade(color, 0.8)));
-  }
-}
-
-// Conifer: stacked drooping tiers, each lit on its left side.
-export function paintConifer(seed, { ppm = 20, height = 12, width = 5, palette = PALETTES.pine } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H);
-  const ctx = c.getContext('2d');
-  const P = palette, cx = W / 2;
-  ctx.fillStyle = rgb(P.trunk);
-  ctx.fillRect(cx - ppm * 0.18, H * 0.78, ppm * 0.36, H * 0.22);
-  const tiers = r.int(6, 9);
-  for (let t = 0; t < tiers; t++) {
-    const f = t / (tiers - 1);              // 0 bottom .. 1 top
-    const y = H * (0.86 - f * 0.78);
-    const half = W * 0.5 * (1 - f * 0.82) * r.range(0.9, 1.05);
-    const tip = y - H * 0.16;
-    const tierPath = () => {
-      // Tip, then a ragged drooping hem from right to left.
-      ctx.beginPath();
-      ctx.moveTo(cx + r.range(-1, 1), tip);
-      const steps = 9;
-      for (let s = 0; s <= steps; s++) {
-        const u = 1 - (s / steps) * 2; // 1 → -1
-        const x = cx + half * u;
-        const droop = (1 - Math.abs(u)) * ppm * 0.35;
-        ctx.lineTo(x, y + droop + (s % 2 ? -ppm * 0.3 : ppm * 0.12));
-      }
-      ctx.closePath();
-    };
-    tierPath(); ctx.fillStyle = rgb(P.dark); ctx.fill();
-    ctx.save(); tierPath(); ctx.clip();
-    // lit left half
-    ctx.fillStyle = rgb(mix(P.mid, P.light, f * 0.5));
-    ctx.beginPath(); ctx.moveTo(cx, tip); ctx.lineTo(cx - half * 1.1, y + 4); ctx.lineTo(cx + half * 0.1, y + 2); ctx.closePath(); ctx.fill();
-    dabs(ctx, r, 18, (rr) => [cx - rr() * half * 0.9, y - rr() * H * 0.12], () => rgb(P.light, 0.8), { size: [ppm * 0.06, ppm * 0.12], angle: 0.5 });
-    ctx.restore();
-  }
-  return c;
-}
-
-// Slim columnar tree (cypress/poplar) — strong vertical accents in the composition.
-export function paintColumn(seed, { ppm = 20, height = 13, width = 3, palette = PALETTES.deep } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H);
-  const ctx = c.getContext('2d');
-  const P = palette, cx = W / 2;
-  ctx.fillStyle = rgb(P.trunk);
-  ctx.fillRect(cx - ppm * 0.15, H * 0.86, ppm * 0.3, H * 0.14);
-  const can = canvas(W, H), cc = can.getContext('2d');
-  for (let i = 0; i < 14; i++) {
-    const f = i / 13;
-    const y = H * (0.86 - f * 0.78);
-    const w = W * 0.46 * Math.sin(Math.PI * (0.15 + f * 0.85)) + ppm * 0.2;
-    wobble(cc, cx + r.range(-0.05, 0.05) * W, y, w, r, { points: 12, jitter: 0.2, squash: 1.3, color: rgb(P.dark) });
-  }
-  cc.globalCompositeOperation = 'source-atop';
-  cc.fillStyle = rgb(P.mid);
-  cc.beginPath(); cc.ellipse(cx - W * 0.12, H * 0.45, W * 0.36, H * 0.42, 0, 0, Math.PI * 2); cc.fill();
-  dabs(cc, r, 70, (rr) => [cx - rr() * W * 0.4, H * (0.1 + rr() * 0.75)], (p, rr) => rgb(rr() < 0.6 ? P.light : P.hi, 0.8), { size: [ppm * 0.07, ppm * 0.14], angle: -1.2 });
-  ctx.drawImage(can, 0, 0);
-  return c;
-}
-
-export function paintBush(seed, { ppm = 20, width = 2.6, height = 1.8, palette = PALETTES.oak, flowers = null } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H), ctx = c.getContext('2d');
-  const P = palette;
-  const clumps = [];
-  for (let i = 0; i < r.int(5, 8); i++) {
-    const rr = H * r.range(0.25, 0.4);
-    clumps.push({ x: r.range(rr, W - rr), y: H - rr * r.range(0.7, 1.4), r: rr });
-  }
-  clumps.sort((a, b) => b.y - a.y);
-  for (const k of clumps) wobble(ctx, k.x, k.y, k.r, r, { points: 14, jitter: 0.2, color: rgb(P.dark) });
-  ctx.globalCompositeOperation = 'source-atop';
-  for (const k of clumps) wobble(ctx, k.x - k.r * 0.2, k.y - k.r * 0.25, k.r * 0.8, r, { color: rgb(P.mid) });
-  for (const k of clumps) wobble(ctx, k.x - k.r * 0.35, k.y - k.r * 0.4, k.r * 0.45, r, { color: rgb(P.light) });
-  dabs(ctx, r, 30, (rr) => [rr() * W, rr() * H * 0.8], () => rgb(P.hi, 0.7), { size: [ppm * 0.05, ppm * 0.1] });
-  if (flowers) {
-    dabs(ctx, r, 26, (rr) => [rr() * W, rr() * H * 0.85], (p, rr) => rgb(rr() < 0.7 ? flowers : [1, 1, 0.95]), { size: [ppm * 0.07, ppm * 0.1], stretch: 1 });
-  }
-  ctx.globalCompositeOperation = 'source-over';
-  return c;
-}
-
-export function paintGrassTuft(seed, { ppm = 20, width = 1.2, height = 0.8, color = [0.42, 0.66, 0.28], flower = null } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H), ctx = c.getContext('2d');
-  const blades = r.int(9, 16);
-  for (let i = 0; i < blades; i++) {
-    const x = W * r.range(0.15, 0.85), h = H * r.range(0.45, 1);
-    const bend = r.range(-0.3, 0.3) * W;
-    const k = r.range(0.7, 1.25);
-    ctx.strokeStyle = rgb(shade(color, k));
-    ctx.lineWidth = Math.max(1.2, ppm * 0.06);
-    ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x, H); ctx.quadraticCurveTo(x + bend * 0.3, H - h * 0.6, x + bend, H - h); ctx.stroke();
-  }
-  if (flower) {
-    for (let i = 0; i < r.int(2, 4); i++) blob(ctx, W * r.range(0.2, 0.8), H * r.range(0.1, 0.35), ppm * 0.09, ppm * 0.09, rgb(flower));
-  }
-  return c;
-}
-
-export function paintReeds(seed, { ppm = 20, width = 1.6, height = 2.2 } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H), ctx = c.getContext('2d');
-  for (let i = 0; i < r.int(8, 13); i++) {
-    const x = W * r.range(0.1, 0.9), h = H * r.range(0.5, 1), bend = r.range(-0.2, 0.2) * W;
-    ctx.strokeStyle = rgb(mix([0.35, 0.5, 0.25], [0.62, 0.66, 0.35], r()));
-    ctx.lineWidth = Math.max(1.2, ppm * 0.05);
-    ctx.beginPath(); ctx.moveTo(x, H); ctx.quadraticCurveTo(x, H - h * 0.5, x + bend, H - h); ctx.stroke();
-    if (r.chance(0.4)) blob(ctx, x + bend, H - h + ppm * 0.2, ppm * 0.06, ppm * 0.22, rgb([0.45, 0.3, 0.18]));
-  }
-  return c;
-}
-
-export function paintRock(seed, { ppm = 20, width = 2, height = 1.4, mossy = true } = {}) {
-  const r = rng(seed);
-  const W = width * ppm, H = height * ppm;
-  const c = canvas(W, H), ctx = c.getContext('2d');
-  const base = mix([0.55, 0.53, 0.52], [0.66, 0.6, 0.52], r());
-  wobble(ctx, W / 2, H * 0.6, W * 0.46, r, { points: 9, jitter: 0.12, squash: (H * 0.85) / W, color: rgb(shade(base, 0.62)) });
-  ctx.globalCompositeOperation = 'source-atop';
-  wobble(ctx, W * 0.42, H * 0.5, W * 0.36, r, { points: 8, jitter: 0.15, squash: (H * 0.7) / W, color: rgb(base) });
-  wobble(ctx, W * 0.34, H * 0.38, W * 0.18, r, { points: 7, jitter: 0.2, squash: 0.7, color: rgb(shade(base, 1.2)) });
-  if (mossy) dabs(ctx, r, 30, (rr) => [rr() * W, H * rr() * 0.35], () => rgb(mix([0.3, 0.5, 0.22], [0.5, 0.68, 0.3], r()), 0.9), { size: [ppm * 0.08, ppm * 0.16] });
-  ctx.globalCompositeOperation = 'source-over';
-  return c;
 }

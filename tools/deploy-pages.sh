@@ -9,4 +9,4 @@ cd "$tmp"
 git init -q -b gh-pages && git add -A
 git -c user.email=noreply@anthropic.com -c user.name=Claude commit -qm "Deploy game build to GitHub Pages"
 git push -f "$(git -C "$OLDPWD" remote get-url origin)" gh-pages
-echo "Deployed: https://lhc6835-hue.github.io/Glacion-kingdom/"
+echo "Deployed: https://lhc6835-hue.github.io/Glacion-kingdom/ (Axenfall)"

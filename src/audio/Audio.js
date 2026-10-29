@@ -1,165 +1,240 @@
-// Procedural sound: there are no audio files. Wind, water, birdsong, crickets and a small
-// generative harp-and-pad score are synthesised live with the Web Audio API.
-
-const SCALES = {
-  field: { root: 62, steps: [0, 2, 4, 7, 9, 12, 14, 16], tempo: 0.52, pad: [0, 7, 16] },     // D major pentatonic
-  town: { root: 67, steps: [0, 2, 4, 5, 7, 9, 11, 12], tempo: 0.42, pad: [0, 4, 7] },        // G major, livelier
-  night: { root: 57, steps: [0, 3, 5, 7, 10, 12, 15], tempo: 0.8, pad: [0, 7, 15] },         // A minor pentatonic, slow
-  high: { root: 64, steps: [0, 2, 7, 9, 12, 14, 19], tempo: 0.7, pad: [0, 7, 14] },           // open fifths on the heights
-};
-const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
-
+// All sound is synthesised with Web Audio (no audio files). Buses: music, sfx, ambience → master.
 export class Audio {
-  constructor(settings) {
-    this.settings = settings;
+  constructor() {
     this.ctx = null;
-    this.mode = 'field';
-    this.nextNote = 0;
-    this.step = 0;
-    this.phrase = [];
+    this.voices = 0;
+    this.vol = { master: 0.8, music: 0.55, sfx: 0.8, ambience: 0.7 };
+    this.night = 0;
+    this.musicOn = true;
   }
 
-  start() {
-    if (this.ctx) { this.ctx.resume(); return; }
+  // Must be called from a user gesture.
+  init() {
+    if (this.ctx) { this.ctx.resume?.(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    const ctx = this.ctx = new AC();
-    this.master = ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(ctx.destination);
-    this.music = ctx.createGain(); this.music.gain.value = this.settings.music * 0.5; this.music.connect(this.master);
-    this.sfx = ctx.createGain(); this.sfx.gain.value = this.settings.sfx; this.sfx.connect(this.master);
-    // Simple reverb from a decaying noise impulse.
-    const ir = ctx.createBuffer(2, ctx.sampleRate * 2.4, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3); }
-    this.verb = ctx.createConvolver(); this.verb.buffer = ir;
-    const vg = ctx.createGain(); vg.gain.value = 0.35; this.verb.connect(vg); vg.connect(this.master);
-
-    const noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-    const nd = noise.getChannelData(0);
-    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-    const loopNoise = () => { const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.start(); return s; };
-
-    // Wind.
-    this.windF = ctx.createBiquadFilter(); this.windF.type = 'lowpass'; this.windF.frequency.value = 500;
-    this.windG = ctx.createGain(); this.windG.gain.value = 0.04;
-    loopNoise().connect(this.windF); this.windF.connect(this.windG); this.windG.connect(this.sfx);
-    // Water.
-    this.waterF = ctx.createBiquadFilter(); this.waterF.type = 'bandpass'; this.waterF.frequency.value = 900; this.waterF.Q.value = 0.5;
-    this.waterG = ctx.createGain(); this.waterG.gain.value = 0;
-    loopNoise().connect(this.waterF); this.waterF.connect(this.waterG); this.waterG.connect(this.sfx);
-    this.waterLow = ctx.createBiquadFilter(); this.waterLow.type = 'lowpass'; this.waterLow.frequency.value = 220;
-    this.waterLowG = ctx.createGain(); this.waterLowG.gain.value = 0;
-    loopNoise().connect(this.waterLow); this.waterLow.connect(this.waterLowG); this.waterLowG.connect(this.sfx);
-    this.nextNote = ctx.currentTime + 1.0;
-    this.nextBird = ctx.currentTime + 2;
-    this.nextCricket = ctx.currentTime + 1;
+    const c = (this.ctx = new AC());
+    this.master = c.createGain();
+    const comp = c.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 4;
+    this.master.connect(comp).connect(c.destination);
+    this.music = c.createGain(); this.music.connect(this.master);
+    this.sfx = c.createGain(); this.sfx.connect(this.master);
+    this.amb = c.createGain(); this.amb.connect(this.master);
+    // a short stereo room for space
+    this.verb = c.createConvolver();
+    this.verb.buffer = this.impulse(2.2);
+    this.verbGain = c.createGain(); this.verbGain.gain.value = 0.28;
+    this.verb.connect(this.verbGain).connect(this.master);
+    const len = c.sampleRate * 2;
+    this.noise = c.createBuffer(1, len, c.sampleRate);
+    const d = this.noise.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.apply();
+    this.startAmbience();
+    this.startMusic();
   }
 
-  setVolumes() {
+  impulse(sec) {
+    const c = this.ctx, n = Math.floor(c.sampleRate * sec);
+    const b = c.createBuffer(2, n, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.6); }
+    return b;
+  }
+
+  setVolumes(s) { this.vol = { master: s.master, music: s.music, sfx: s.sfx, ambience: s.ambience }; this.apply(); }
+  apply() {
     if (!this.ctx) return;
-    this.music.gain.setTargetAtTime(this.settings.music * 0.5, this.ctx.currentTime, 0.3);
-    this.sfx.gain.setTargetAtTime(this.settings.sfx, this.ctx.currentTime, 0.3);
+    const t = this.ctx.currentTime;
+    this.master.gain.setTargetAtTime(this.vol.master, t, 0.05);
+    this.music.gain.setTargetAtTime(this.vol.music * 0.5, t, 0.05);
+    this.sfx.gain.setTargetAtTime(this.vol.sfx, t, 0.05);
+    this.amb.gain.setTargetAtTime(this.vol.ambience * 0.6, t, 0.05);
   }
 
-  // env: { water: 0..1 nearness to falling water, height, night, town, birds }
-  update(env) {
-    const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running') return;
-    const t = ctx.currentTime;
-    this.windG.gain.setTargetAtTime(0.025 + Math.min(0.09, env.height * 0.0012) + env.gliding * 0.06, t, 0.5);
-    this.windF.frequency.setTargetAtTime(380 + Math.sin(t * 0.21) * 160 + env.gliding * 500, t, 0.4);
-    this.waterG.gain.setTargetAtTime(env.water * 0.22, t, 0.3);
-    this.waterLowG.gain.setTargetAtTime(env.water * 0.35, t, 0.3);
-    const mode = env.night ? 'night' : env.town ? 'town' : env.height > 45 ? 'high' : 'field';
-    if (mode !== this.mode) { this.mode = mode; this.phrase = []; }
+  // ── primitives ──
+  env(node, t, a, peak, dec, end = 0.0001) {
+    node.gain.setValueAtTime(0.0001, t);
+    node.gain.exponentialRampToValueAtTime(peak, t + a);
+    node.gain.exponentialRampToValueAtTime(end, t + a + dec);
+  }
 
-    // Generative score: a slowly evolving phrase on a harp, with a soft pad every few bars.
-    const sc = SCALES[this.mode];
-    while (this.nextNote < t + 0.2) {
-      if (!this.phrase.length) this.phrase = makePhrase(sc);
-      const n = this.phrase.shift();
-      if (n !== null) this.pluck(mtof(sc.root + n), this.nextNote, 0.16);
-      if (this.step % 16 === 0) this.pad(sc.pad.map((p) => mtof(sc.root - 12 + p)), this.nextNote, sc.tempo * 15);
-      this.step++;
-      this.nextNote += sc.tempo * (Math.random() < 0.12 ? 1.5 : 1);
+  tone(type, f0, f1, dur, vol, { bus = this.sfx, t = 0, attack = 0.004, pan = 0, verb = 0 } = {}) {
+    if (!this.ctx || this.voices > 28) return;
+    const c = this.ctx, now = c.currentTime + t;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, now);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + dur);
+    this.env(g, now, attack, vol, dur);
+    let out = g;
+    if (pan) { const p = c.createStereoPanner(); p.pan.value = pan; g.connect(p); out = p; }
+    o.connect(g); out.connect(bus);
+    if (verb) { const v = c.createGain(); v.gain.value = verb; out.connect(v).connect(this.verb); }
+    this.voices++;
+    o.onended = () => this.voices--;
+    o.start(now); o.stop(now + attack + dur + 0.05);
+  }
+
+  hiss(dur, vol, { type = 'bandpass', f0 = 1000, f1 = f0, q = 1, bus = this.sfx, t = 0, attack = 0.003, pan = 0, verb = 0 } = {}) {
+    if (!this.ctx || this.voices > 28) return;
+    const c = this.ctx, now = c.currentTime + t;
+    const s = c.createBufferSource(); s.buffer = this.noise; s.playbackRate.value = 0.8 + Math.random() * 0.4;
+    const fl = c.createBiquadFilter(); fl.type = type; fl.Q.value = q;
+    fl.frequency.setValueAtTime(f0, now); fl.frequency.exponentialRampToValueAtTime(Math.max(30, f1), now + attack + dur);
+    const g = c.createGain(); this.env(g, now, attack, vol, dur);
+    let out = g;
+    if (pan) { const p = c.createStereoPanner(); p.pan.value = pan; g.connect(p); out = p; }
+    s.connect(fl).connect(g); out.connect(bus);
+    if (verb) { const v = c.createGain(); v.gain.value = verb; out.connect(v).connect(this.verb); }
+    this.voices++;
+    s.onended = () => this.voices--;
+    s.start(now, Math.random()); s.stop(now + attack + dur + 0.05);
+  }
+
+  // ── game sounds ──
+  play(name, o = {}) {
+    if (!this.ctx) return;
+    const pan = o.pan || 0;
+    switch (name) {
+      case 'whoosh': this.hiss(0.16, 0.18, { f0: 600, f1: 2400, q: 1.2, attack: 0.04, pan }); break;
+      case 'chop': {
+        const k = { great: 1.15, good: 1, weak: 0.7 }[o.j] || 1;
+        this.tone('sine', 130 * k, 52, 0.18, 0.5, { pan });                    // body thump
+        this.tone('triangle', 330 * k, 180, 0.09, 0.25, { pan });              // wood knock
+        this.hiss(0.08, 0.35, { f0: 1600, f1: 700, q: 2, pan });              // splinters
+        this.hiss(0.05, 0.2, { type: 'highpass', f0: 4000, pan, t: 0.01 });
+        break;
+      }
+      case 'crit':
+        this.tone('sine', 110, 38, 0.35, 0.75, { pan });
+        this.tone('triangle', 420, 160, 0.12, 0.3, { pan });
+        this.hiss(0.14, 0.45, { f0: 2400, f1: 600, q: 1.5, pan });
+        this.tone('sine', 1760, 1760, 0.4, 0.12, { pan, verb: 0.5, t: 0.01 });
+        this.tone('sine', 2637, 2637, 0.3, 0.08, { pan, verb: 0.5, t: 0.03 });
+        break;
+      case 'miss': this.hiss(0.2, 0.12, { f0: 900, f1: 300, q: 0.8, attack: 0.03, pan }); break;
+      case 'burn': for (let i = 0; i < 4; i++) this.hiss(0.03, 0.12, { type: 'highpass', f0: 2500 + Math.random() * 2000, t: i * 0.05 + Math.random() * 0.03, pan }); this.hiss(0.3, 0.08, { type: 'lowpass', f0: 600, pan }); break;
+      case 'frost': this.hiss(0.18, 0.15, { type: 'highpass', f0: 6000, f1: 3000, pan }); this.tone('sine', 2800, 3600, 0.15, 0.06, { pan, verb: 0.6 }); this.tone('sine', 3900, 4400, 0.12, 0.05, { t: 0.05, pan, verb: 0.6 }); break;
+      case 'zap': this.tone('square', 1400, 90, 0.12, 0.12, { pan }); this.hiss(0.1, 0.25, { f0: 3000, f1: 800, q: 3, pan }); this.tone('sine', 70, 40, 0.2, 0.3, { pan }); break;
+      case 'poison': this.tone('sine', 300, 520, 0.08, 0.08, { pan }); this.tone('sine', 380, 640, 0.07, 0.06, { t: 0.07, pan }); break;
+      case 'void': this.tone('sawtooth', 220, 55, 0.4, 0.15, { pan, verb: 0.4 }); this.tone('sine', 55, 30, 0.5, 0.4, { pan }); break;
+      case 'creak': this.tone('sawtooth', 90, 70, 0.6, 0.07, { attack: 0.2, pan }); this.hiss(0.5, 0.06, { f0: 400, q: 6, attack: 0.2, pan }); break;
+      case 'fell': {
+        const big = o.size || 1;
+        this.tone('sine', 70, 28, 0.6 * big, 0.8, { pan });
+        this.hiss(0.5 * big, 0.4, { type: 'lowpass', f0: 900, f1: 120, pan });
+        this.hiss(0.9, 0.18, { f0: 3000, f1: 1500, q: 0.5, attack: 0.05, t: 0.05, pan }); // leaves
+        break;
+      }
+      case 'coin': this.tone('square', 1318, 1318, 0.06, 0.06); this.tone('square', 1760, 1760, 0.12, 0.06, { t: 0.06 }); break;
+      case 'pickup': this.tone('triangle', 660, 990, 0.08, 0.12); break;
+      case 'click': this.tone('triangle', 900, 700, 0.04, 0.1); break;
+      case 'open': this.tone('triangle', 440, 660, 0.08, 0.1); this.hiss(0.08, 0.05, { f0: 2000 }); break;
+      case 'close': this.tone('triangle', 660, 440, 0.07, 0.08); break;
+      case 'buy': [523, 659, 784].forEach((f, i) => this.tone('triangle', f, f, 0.18, 0.12, { t: i * 0.07, verb: 0.3 })); break;
+      case 'error': this.tone('square', 180, 140, 0.15, 0.08); break;
+      case 'step': this.hiss(0.04, o.run ? 0.08 : 0.05, { type: 'lowpass', f0: 500, f1: 200, pan }); break;
+      case 'jump': this.hiss(0.06, 0.05, { f0: 800, f1: 1600 }); break;
+      case 'land': this.hiss(0.08, 0.1, { type: 'lowpass', f0: 400, f1: 120 }); break;
+      case 'levelup': [392, 523, 659, 784, 1046].forEach((f, i) => this.tone('triangle', f, f, 0.3, 0.13, { t: i * 0.08, verb: 0.5 })); break;
+      case 'rare': [880, 1108, 1318, 1760].forEach((f, i) => this.tone('sine', f, f, 0.5, 0.1, { t: i * 0.09, verb: 0.7 })); break;
+      case 'gacha': {
+        const g = o.grade || 0;
+        this.hiss(0.5, 0.1, { f0: 300, f1: 3000, attack: 0.3 });
+        const notes = [523, 587, 659, 784, 880, 1046, 1174, 1318];
+        const n = 3 + Math.min(5, Math.floor(g / 2));
+        for (let i = 0; i < n; i++) this.tone('triangle', notes[i], notes[i], 0.25, 0.1, { t: 0.3 + i * 0.07, verb: 0.5 });
+        if (g >= 5) { this.tone('sine', 65, 65, 1.4, 0.35, { t: 0.3, attack: 0.05 }); this.tone('sine', 1568, 1568, 1.2, 0.08, { t: 0.7, verb: 0.8 }); }
+        break;
+      }
+      case 'title': this.tone('sine', 98, 98, 2.2, 0.3, { attack: 0.3, verb: 0.6 }); [392, 587, 784].forEach((f, i) => this.tone('triangle', f, f, 1.6, 0.08, { t: 0.1 + i * 0.12, verb: 0.8 })); break;
+      case 'swell': this.hiss(1.2, 0.1, { f0: 200, f1: 2500, attack: 1 }); this.tone('sine', 196, 196, 1.4, 0.12, { attack: 0.8, verb: 0.8 }); this.tone('sine', 293, 293, 1.4, 0.08, { attack: 0.9, verb: 0.8 }); break;
+      case 'chime': this.tone('sine', 1318, 1318, 0.8, 0.06, { verb: 0.9 }); this.tone('sine', 1975, 1975, 0.6, 0.04, { t: 0.08, verb: 0.9 }); break;
+      case 'mill': this.hiss(0.25, 0.08, { f0: 2500, f1: 3200, q: 8, pan }); break;
+      default: break;
     }
-    if (!env.night && env.birds > 0.2 && t > this.nextBird) { this.chirp(t); this.nextBird = t + 0.8 + Math.random() * 4 / env.birds; }
-    if (env.night && t > this.nextCricket) { this.cricket(t); this.nextCricket = t + 0.4 + Math.random() * 1.6; }
   }
 
-  pluck(freq, when, vol) {
-    const ctx = this.ctx;
-    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'triangle'; o.frequency.value = freq;
-    o2.type = 'sine'; o2.frequency.value = freq * 2;
-    const g2 = ctx.createGain(); g2.gain.value = 0.25;
-    g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when + 0.01); g.gain.exponentialRampToValueAtTime(0.0008, when + 2.2);
-    o.connect(g); o2.connect(g2); g2.connect(g); g.connect(this.music); g.connect(this.verb);
-    o.start(when); o2.start(when); o.stop(when + 2.3); o2.stop(when + 2.3);
-  }
-
-  pad(freqs, when, dur) {
-    const ctx = this.ctx;
-    for (const f of freqs) {
-      const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
-      o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = (Math.random() - 0.5) * 12;
-      lp.type = 'lowpass'; lp.frequency.value = 700;
-      g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(0.018, when + dur * 0.35); g.gain.linearRampToValueAtTime(0, when + dur);
-      o.connect(lp); lp.connect(g); g.connect(this.music); g.connect(this.verb);
-      o.start(when); o.stop(when + dur + 0.1);
-    }
-  }
-
-  chirp(t) {
-    const ctx = this.ctx;
-    const base = 2600 + Math.random() * 1800, n = 2 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < n; i++) {
-      const o = ctx.createOscillator(), g = ctx.createGain(), w = t + i * (0.07 + Math.random() * 0.05);
-      o.type = 'sine';
-      o.frequency.setValueAtTime(base, w); o.frequency.exponentialRampToValueAtTime(base * (0.7 + Math.random() * 0.7), w + 0.06);
-      g.gain.setValueAtTime(0, w); g.gain.linearRampToValueAtTime(0.03, w + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, w + 0.08);
-      o.connect(g); g.connect(this.sfx); g.connect(this.verb); o.start(w); o.stop(w + 0.1);
-    }
-  }
-
-  cricket(t) {
-    const ctx = this.ctx;
-    for (let i = 0; i < 3; i++) {
-      const o = ctx.createOscillator(), g = ctx.createGain(), w = t + i * 0.05;
-      o.frequency.value = 4400 + Math.random() * 300;
-      g.gain.setValueAtTime(0, w); g.gain.linearRampToValueAtTime(0.008, w + 0.01); g.gain.linearRampToValueAtTime(0, w + 0.035);
-      o.connect(g); g.connect(this.sfx); o.start(w); o.stop(w + 0.05);
-    }
-  }
-
-  // Short UI / action sounds.
-  play(name) {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    const tone = (f, d, v = 0.08, type = 'sine', at = 0) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = type; o.frequency.value = f;
-      g.gain.setValueAtTime(0, t + at); g.gain.linearRampToValueAtTime(v, t + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + at + d);
-      o.connect(g); g.connect(this.sfx); g.connect(this.verb); o.start(t + at); o.stop(t + at + d + 0.05);
+  // ── ambience: wind and creek beds, birdsong and crickets on random timers ──
+  startAmbience() {
+    const c = this.ctx;
+    const bed = (type, f, q, vol, lfo) => {
+      const s = c.createBufferSource(); s.buffer = this.noise; s.loop = true;
+      const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+      const g = c.createGain(); g.gain.value = vol;
+      const l = c.createOscillator(); l.frequency.value = lfo; const lg = c.createGain(); lg.gain.value = f * 0.35;
+      l.connect(lg).connect(fl.frequency); l.start();
+      s.connect(fl).connect(g).connect(this.amb); s.start();
+      return g;
     };
-    if (name === 'jump') { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(380, t); o.frequency.exponentialRampToValueAtTime(760, t + 0.1); g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.14); o.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 0.16); }
-    else if (name === 'pickup') { tone(988, 0.3, 0.07); tone(1319, 0.4, 0.06, 'sine', 0.08); }
-    else if (name === 'talk') tone(660 + Math.random() * 80, 0.06, 0.04, 'triangle');
-    else if (name === 'discover') [0, 4, 7, 12].forEach((s, i) => tone(mtof(72 + s), 1.2, 0.06, 'triangle', i * 0.12));
-    else if (name === 'quest') { tone(784, 0.4, 0.06, 'triangle'); tone(1175, 0.6, 0.05, 'triangle', 0.12); }
-    else if (name === 'open') tone(523, 0.15, 0.04, 'triangle');
+    this.windBed = bed('lowpass', 520, 0.7, 0.16, 0.07);
+    this.creekBed = bed('bandpass', 2200, 0.6, 0.05, 0.4);
+    const birds = () => {
+      if (this.night < 0.5) this.birdCall();
+      setTimeout(birds, 2500 + Math.random() * 6000);
+    };
+    setTimeout(birds, 1500);
+    const night = () => {
+      if (this.night > 0.5) {
+        const pan = Math.random() * 2 - 1;
+        for (let i = 0; i < 6; i++) this.tone('sine', 4200, 4200, 0.03, 0.025, { bus: this.amb, t: i * 0.06, pan });
+        if (Math.random() < 0.15) { this.tone('sine', 380, 340, 0.4, 0.08, { bus: this.amb, attack: 0.08, verb: 0.6, pan }); this.tone('sine', 360, 320, 0.5, 0.07, { bus: this.amb, t: 0.6, attack: 0.08, verb: 0.6, pan }); }
+      }
+      setTimeout(night, 900 + Math.random() * 1600);
+    };
+    setTimeout(night, 1000);
   }
-}
 
-function makePhrase(sc) {
-  // Stepwise motion with occasional leaps and rests; resolves toward the root.
-  const out = [];
-  let i = Math.floor(Math.random() * sc.steps.length);
-  for (let k = 0; k < 8; k++) {
-    if (Math.random() < 0.22) { out.push(null); continue; }
-    i = Math.max(0, Math.min(sc.steps.length - 1, i + (Math.random() < 0.7 ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -2 : 2))));
-    out.push(sc.steps[i]);
+  birdCall() {
+    const pan = Math.random() * 1.6 - 0.8;
+    const base = 2200 + Math.random() * 1600;
+    const n = 2 + Math.floor(Math.random() * 4);
+    const vol = 0.03 + Math.random() * 0.04;
+    for (let i = 0; i < n; i++) this.tone('sine', base * (1 + Math.random() * 0.2), base * (0.7 + Math.random() * 0.6), 0.06 + Math.random() * 0.06, vol, { bus: this.amb, t: i * (0.09 + Math.random() * 0.05), pan, verb: 0.4 });
   }
-  out.push(sc.steps[0], null, null, null);
-  return out;
+
+  setNight(n) { this.night = n; }
+
+  // ── generative music: cool modal pads (D dorian) with a sparse plucked melody ──
+  startMusic() {
+    const c = this.ctx;
+    const chords = [[146.8, 220, 261.6, 329.6], [130.8, 196, 246.9, 329.6], [116.5, 174.6, 220, 293.7], [130.8, 196, 261.6, 293.7]];
+    const scale = [293.7, 329.6, 349.2, 392, 440, 493.9, 523.3, 587.3, 659.3];
+    let bar = 0;
+    const beat = 60 / 68;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    lp.connect(this.music);
+    const pv = c.createGain(); pv.gain.value = 0.5; lp.connect(pv).connect(this.verb);
+    let next = c.currentTime + 0.5;
+    const schedule = () => {
+      while (next < c.currentTime + 2) {
+        const ch = chords[bar % chords.length];
+        for (const f of ch) {
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'triangle'; o.frequency.value = f; o.detune.value = (Math.random() - 0.5) * 8;
+          g.gain.setValueAtTime(0.0001, next);
+          g.gain.linearRampToValueAtTime(0.028, next + beat * 1.5);
+          g.gain.linearRampToValueAtTime(0.0001, next + beat * 4.2);
+          o.connect(g).connect(lp); o.start(next); o.stop(next + beat * 4.4);
+        }
+        // melody: a few notes per bar, rests are common
+        for (let b = 0; b < 4; b++) {
+          if (Math.random() < 0.45) continue;
+          const f = scale[Math.floor(Math.random() * scale.length)];
+          const t = next + b * beat + (Math.random() < 0.3 ? beat / 2 : 0);
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'sine'; o.frequency.value = f * (this.night > 0.5 ? 0.5 : 1);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.05, t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + beat * 1.6);
+          o.connect(g).connect(lp); o.start(t); o.stop(t + beat * 1.7);
+        }
+        next += beat * 4;
+        bar++;
+      }
+      setTimeout(schedule, 500);
+    };
+    schedule();
+  }
 }
