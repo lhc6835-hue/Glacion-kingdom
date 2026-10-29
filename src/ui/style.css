@@ -7,7 +7,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #050c0c; overflow: hidden; color: var(--ink); font-family: var(--font); }
-#game { position: fixed; inset: 0; display: block; image-rendering: pixelated; cursor: crosshair; }
+#game { position: fixed; left: 0; top: 0; display: block; image-rendering: pixelated; cursor: crosshair; }
 #ui { position: fixed; inset: 0; pointer-events: none; font-size: calc(14px * var(--ui)); }
 #ui button, #ui input, #ui select, .panel-wrap, .panel, .boot, .skip, .btns, .equip .skill { pointer-events: auto; }
 .hidden { display: none !important; }
@@ -79,9 +79,6 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
 .pad-r .small { position: absolute; width: 54px; height: 54px; font-size: 14px; }
 .pad-r [data-key="e"] { right: 104px; bottom: 96px; }
 .pad-r [data-key="q"] { right: 30px; bottom: 120px; border-color: rgba(160,200,255,.5); }
-.rotate-hint { display: none; position: absolute; left: 50%; top: 40%; transform: translateX(-50%); padding: .5em 1em; border-radius: 6px; background: rgba(8,18,18,.75); color: var(--dim); font-size: .9em; }
-@media (orientation: portrait) { .touch-mode .rotate-hint { display: block; animation: fadeUp .6s ease both, hintOut 1s ease forwards 4s; } }
-@keyframes hintOut { to { opacity: 0; visibility: hidden; } }
 /* make room for the thumbs: equipment card moves up, objective goes top-centre */
 .touch-mode .equip { top: calc(12px + 3em); bottom: auto; transform: scale(.85); transform-origin: top left; }
 .touch-mode .objective { left: 50%; top: calc(12px + 3em); transform: translateX(-50%); max-width: 44vw; font-size: .8em; border-left: 0; border-radius: 6px; text-align: center; }
@@ -347,3 +344,28 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
 }
 @media (orientation: landscape) and (max-height: 480px) { .shrine { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); } .gfx-spot { grid-template-columns: auto minmax(0, 22em); text-align: left; justify-items: stretch; } }
 @media (prefers-reduced-motion: reduce) { .gfx *, .altar2 * { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }
+
+/* ── portrait: game view on top, control deck below ── */
+.deck { display: none; }
+.portrait .deck { display: block; position: fixed; left: 0; right: 0; top: var(--view-h); bottom: 0; pointer-events: none;
+  background: linear-gradient(#2a3a1e 0, #2a3a1e 3px, #1a120c 3px, #140e0a 30%, #0a0806); box-shadow: inset 0 6px 12px rgba(0,0,0,.5); }
+.portrait .deck::before { content: ''; position: absolute; inset: 3px 0 auto; height: 40px; opacity: .35;
+  background: radial-gradient(circle at 20% 60%, #3a2a1c 0 3px, transparent 4px) 0 0 / 46px 40px, radial-gradient(circle at 70% 30%, #4a3826 0 2px, transparent 3px) 0 0 / 34px 40px; }
+.portrait #hud { bottom: auto; height: var(--view-h); }
+.portrait .pad-l { gap: 10px; }
+.portrait .touch .pad-l .tb { width: 70px; height: 70px; font-size: 24px; }
+.portrait .pad-r { width: 176px; height: 150px; }
+.portrait .pad-r .chop { width: 86px; height: 86px; }
+.portrait .pad-r .jump { right: 96px; bottom: 4px; width: 62px; height: 62px; }
+.portrait .pad-r .small { width: 48px; height: 48px; font-size: 13px; }
+.portrait .pad-r [data-key="e"] { right: 104px; bottom: 80px; }
+.portrait .pad-r [data-key="q"] { right: 20px; bottom: 98px; }
+@media (min-height: 760px) and (orientation: portrait) {
+  .portrait .touch .pad-l .tb { width: 78px; height: 78px; }
+  .portrait .pad-r { transform: scale(1.12); transform-origin: bottom right; }
+}
+/* objective sits at the top of the deck; the action prompt stays at the bottom of the game view */
+.portrait.touch-mode .objective { top: calc(var(--view-h) + 10px); max-width: calc(100vw - 32px); width: max-content; font-size: .8em; }
+.portrait.touch-mode .prompt { bottom: 10px; max-width: calc(100vw - 32px); font-size: .85em; }
+.portrait .equip { bottom: auto; top: calc(12px + 3em); transform: scale(.85); transform-origin: top left; }
+.portrait .toasts { top: calc(12px + 6em); }

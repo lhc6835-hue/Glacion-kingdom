@@ -25,17 +25,25 @@ export class Engine {
 
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const cw = Math.max(320, innerWidth), ch = Math.max(200, innerHeight);
+    const cw = Math.max(320, innerWidth);
+    // Portrait screens would make the scene absurdly tall (the parallax layers and trunks run out),
+    // so the game view keeps a landscape-ish shape at the top and the rest becomes a control deck.
+    this.portrait = innerHeight > innerWidth * 1.05;
+    const ch = this.portrait ? Math.max(260, Math.min(Math.round(cw * 1.25), innerHeight - 250)) : Math.max(200, innerHeight);
     const dw = Math.round(cw * dpr), dh = Math.round(ch * dpr);
     this.display.width = dw; this.display.height = dh;
     this.display.style.width = cw + 'px'; this.display.style.height = ch + 'px';
-    // keep at least ~320 art pixels across so portrait phones still see the scene
-    this.scale = Math.max(1, Math.min(Math.round(dh / BASE_H), Math.floor(dw / 320)));
+    // whole-number scale near 270 art pixels tall, but never narrower than 240 art pixels
+    let scale = Math.max(1, Math.round(dh / BASE_H));
+    if (dw / scale < 240) scale = Math.max(1, Math.floor(dw / 240));
+    this.scale = scale;
     this.W = Math.ceil(dw / this.scale);
     this.H = Math.ceil(dh / this.scale);
     for (const [c, k] of [[this.pix, 1], [this.light, 2], [this.ui, 1]]) { c.width = this.W * k; c.height = this.H * k; }
     for (const g of [this.pg, this.ug, this.dg]) g.imageSmoothingEnabled = false;
     this.cssScale = this.scale / dpr; // art pixels → CSS pixels
+    document.documentElement.style.setProperty('--view-h', ch + 'px');
+    document.body.classList.toggle('portrait', this.portrait);
     this.onResize?.();
   }
 

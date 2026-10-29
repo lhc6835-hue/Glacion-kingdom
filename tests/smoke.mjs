@@ -189,6 +189,20 @@ try {
   check('도끼 button strikes', await m.evaluate(() => window.__axenfall.state.stats.hits + window.__axenfall.state.stats.misses === 1));
   check('phone layout has no horizontal overflow', await m.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await mctx.close();
+  // ── phone: portrait ──
+  const pctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const pp = await pctx.newPage();
+  pp.on('pageerror', (e) => errors.push('portrait: ' + e.message));
+  await pp.goto(base);
+  await pp.waitForFunction(() => window.__axenfall);
+  await pp.touchscreen.tap(195, 300);
+  await pp.waitForFunction(() => window.__axenfall.mode === 'play');
+  const pv = await pp.evaluate(() => { const e = window.__axenfall.engine; return { portrait: e.portrait, H: e.H, W: e.W, view: e.display.getBoundingClientRect().height }; });
+  check('portrait keeps a landscape-like game view', pv.portrait && pv.H <= 340 && pv.W >= 240 && pv.view < 844 - 200, JSON.stringify(pv));
+  const boxes = await pp.evaluate(() => [...document.querySelectorAll('#touch .tb')].map((b) => { const r = b.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }));
+  const overlap = boxes.some((a, i) => boxes.some((b, j) => j > i && a[0] < b[2] - 2 && b[0] < a[2] - 2 && a[1] < b[3] - 2 && b[1] < a[3] - 2));
+  check('portrait controls sit in the deck without overlapping', !overlap && boxes.every((r) => r[1] >= pv.view - 1 && r[2] <= 390), JSON.stringify(boxes.map((r) => r.map(Math.round))));
+  await pctx.close();
   check('no runtime errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   check('test harness', false, e.message.split('\n')[0]);

@@ -55,6 +55,7 @@ export class UI {
           <div class="boot-note">소리가 함께 재생돼요 · v0.1</div>
         </div>
       </div>
+      <div class="deck" aria-hidden="true"></div>
       <div id="hud" class="hidden">
         <div class="res" id="res"></div>
         <div class="objective" id="objective"></div>
@@ -74,7 +75,6 @@ export class UI {
           <button class="tb jump" data-key=" " aria-label="점프">점프</button>
           <button class="tb chop" data-chop aria-label="도끼질">도끼</button>
         </div>
-        <div class="rotate-hint">가로로 돌리면 더 넓게 보여요</div>
       </div>
       <div id="panelWrap" class="panel-wrap hidden"><div class="panel" id="panel"></div></div>`;
     this.$ = (id) => root.querySelector('#' + id);
