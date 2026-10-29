@@ -320,6 +320,11 @@ export class Game {
     const inp = this.input;
     // panel keys work even while a panel has disabled game input
     const raw = (k) => inp.pressed.has(k);
+    if (this.ui.fx.open) {
+      if (raw('Escape')) this.ui.fx.stageN === 'done' ? this.ui.fx.close() : this.ui.fx.skip();
+      else if (raw(' ') || raw('Enter')) this.ui.fx.stageN === 'done' ? this.ui.fx.close() : this.ui.fx.skip();
+      return;
+    }
     if (this.ui.panel) {
       if (raw('Escape') || (raw('i') && this.ui.panel === 'bag') || (raw('c') && this.ui.panel === 'codex')) this.ui.close();
       return;

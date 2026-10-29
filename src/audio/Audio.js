@@ -139,15 +139,32 @@ export class Audio {
       case 'land': this.hiss(0.08, 0.1, { type: 'lowpass', f0: 400, f1: 120 }); break;
       case 'levelup': [392, 523, 659, 784, 1046].forEach((f, i) => this.tone('triangle', f, f, 0.3, 0.13, { t: i * 0.08, verb: 0.5 })); break;
       case 'rare': [880, 1108, 1318, 1760].forEach((f, i) => this.tone('sine', f, f, 0.5, 0.1, { t: i * 0.09, verb: 0.7 })); break;
-      case 'gacha': {
-        const g = o.grade || 0;
-        this.hiss(0.5, 0.1, { f0: 300, f1: 3000, attack: 0.3 });
-        const notes = [523, 587, 659, 784, 880, 1046, 1174, 1318];
-        const n = 3 + Math.min(5, Math.floor(g / 2));
-        for (let i = 0; i < n; i++) this.tone('triangle', notes[i], notes[i], 0.25, 0.1, { t: 0.3 + i * 0.07, verb: 0.5 });
-        if (g >= 5) { this.tone('sine', 65, 65, 1.4, 0.35, { t: 0.3, attack: 0.05 }); this.tone('sine', 1568, 1568, 1.2, 0.08, { t: 0.7, verb: 0.8 }); }
+      // altar reveal: charge → burst → card flips → spotlight. tier 0..3 scales the drama
+      case 'gachaCharge': {
+        const tier = o.tier || 0;
+        this.hiss(0.9, 0.12 + tier * 0.03, { f0: 200, f1: 2800 + tier * 1200, attack: 0.8, q: 2 });
+        this.tone('sine', 55, 82 + tier * 10, 1.0, 0.25 + tier * 0.05, { attack: 0.7 });
+        for (let i = 0; i < 6 + tier * 2; i++) this.tone('sine', 880 + i * 110, 880 + i * 110, 0.12, 0.025, { t: 0.1 + i * 0.09, verb: 0.6 });
         break;
       }
+      case 'gachaBurst': {
+        const tier = o.tier || 0;
+        this.tone('sine', 90, 30, 0.9, 0.7, {});
+        this.hiss(0.6, 0.35, { type: 'lowpass', f0: 3000, f1: 200 });
+        const chords = [[523, 659, 784], [587, 740, 880, 1175], [523, 659, 831, 1047, 1319], [587, 740, 880, 1175, 1480, 1760]];
+        chords[tier].forEach((f, i) => { this.tone('triangle', f, f, 1.4, 0.09, { t: 0.02 + i * 0.05, verb: 0.8 }); this.tone('sine', f * 2, f * 2, 1.1, 0.03, { t: 0.08 + i * 0.05, verb: 0.9 }); });
+        if (tier >= 2) this.tone('sine', 1568, 1568, 2, 0.06, { t: 0.4, verb: 1 });
+        break;
+      }
+      case 'flip': this.hiss(0.07, 0.12, { f0: 1800, f1: 4000, q: 1.5 }); this.tone('triangle', 1200 + (o.i || 0) * 60, 1500, 0.06, 0.05); break;
+      case 'flipHi': {
+        const g = o.grade || 0;
+        this.tone('sine', 70, 40, 0.6, 0.45, {});
+        [784, 988, 1175, 1568].slice(0, 2 + Math.min(2, Math.floor(g / 4))).forEach((f, i) => this.tone('triangle', f, f, 0.9, 0.08, { t: i * 0.06, verb: 0.8 }));
+        this.hiss(0.5, 0.1, { type: 'highpass', f0: 5000, attack: 0.02, verb: 0.6 });
+        break;
+      }
+      case 'spot': [392, 523, 659, 784, 1047, 1319].forEach((f, i) => this.tone('triangle', f, f, 0.6 + i * 0.1, 0.1, { t: i * 0.09, verb: 0.8 })); this.tone('sine', 65, 65, 1.6, 0.3, { attack: 0.1 }); break;
       case 'title': this.tone('sine', 98, 98, 2.2, 0.3, { attack: 0.3, verb: 0.6 }); [392, 587, 784].forEach((f, i) => this.tone('triangle', f, f, 1.6, 0.08, { t: 0.1 + i * 0.12, verb: 0.8 })); break;
       case 'swell': this.hiss(1.2, 0.1, { f0: 200, f1: 2500, attack: 1 }); this.tone('sine', 196, 196, 1.4, 0.12, { attack: 0.8, verb: 0.8 }); this.tone('sine', 293, 293, 1.4, 0.08, { attack: 0.9, verb: 0.8 }); break;
       case 'chime': this.tone('sine', 1318, 1318, 0.8, 0.06, { verb: 0.9 }); this.tone('sine', 1975, 1975, 0.6, 0.04, { t: 0.08, verb: 0.9 }); break;

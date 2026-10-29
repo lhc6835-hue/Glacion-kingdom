@@ -108,9 +108,15 @@ try {
   await page.keyboard.press('e');
   await page.waitForSelector('[data-panel="altar"]');
   await page.click('[data-act="pull"][data-arg="10"]');
-  await wait(200);
-  const pulls = await G(() => ({ n: window.__axenfall.state.gacha.pulls, cards: document.querySelectorAll('.card').length, gold: window.__axenfall.state.gold }));
-  check('10-pull shows 10 cards and charges 1080', pulls.n === 10 && pulls.cards === 10 && pulls.gold === 4860 - 1080, JSON.stringify(pulls));
+  await wait(150);
+  check('pull starts the full-screen reveal', await G(() => window.__axenfall.ui.fx.open && window.__axenfall.ui.fx.stageN === 'charge'));
+  await page.waitForFunction(() => document.querySelectorAll('.gfx .gcard').length === 10, null, { timeout: 5000 });
+  const pulls = await G(() => ({ n: window.__axenfall.state.gacha.pulls, gold: window.__axenfall.state.gold }));
+  check('10-pull deals 10 cards and charges 1080', pulls.n === 10 && pulls.gold === 4860 - 1080, JSON.stringify(pulls));
+  for (let i = 0; i < 3; i++) { await page.mouse.click(640, 360); await wait(120); }
+  check('taps skip to the summary with every card face up', await G(() => window.__axenfall.ui.fx.stageN === 'done' && document.querySelectorAll('.gfx .gcard.flip').length === 10));
+  await page.click('.gfx [data-g="ok"]');
+  check('confirm closes the reveal and keeps the altar open', await G(() => !window.__axenfall.ui.fx.open && window.__axenfall.ui.panel === 'altar'));
   await page.keyboard.press('Escape');
 
   // ── sawmill ──

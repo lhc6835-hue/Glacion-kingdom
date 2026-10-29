@@ -12,6 +12,7 @@ import { canAfford, count, costLabel } from '../game/GameState.js';
 import { axeDamage } from '../game/AxeStats.js';
 import { itemIcon, axeIcon } from '../art/icons.js';
 import { LORE } from '../game/World.js';
+import { GachaFX } from './GachaFX.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
@@ -93,6 +94,7 @@ export class UI {
     this.lastHud = '';
     this.refreshT = 0;
     this.setupTouch();
+    this.fx = new GachaFX(root, this);
   }
 
   // On-screen controls for phones and tablets. They appear on coarse pointers or on first touch.
@@ -244,21 +246,49 @@ export class UI {
     const s = this.g.state, gs = s.gacha;
     const w = gradeWeights(gs);
     const total = w.reduce((a, b) => a + b, 0);
-    const rates = GRADES.map((gr, i) => `<tr><td>${gradeTag(i)}</td><td>${((w[i] / total) * 100).toFixed(w[i] / total < 0.001 ? 2 : 1)}%</td><td>${AXES.filter((a) => a.grade === i).length}종</td></tr>`).join('');
-    const res = this.lastPull ? `<div class="pulls">${this.lastPull.map((r, i) => {
-      const a = AXE_BY_ID[r.id], gr = GRADES[r.grade];
-      return `<div class="card g${Math.min(r.grade, 9)}" style="--gc:${gr.color};--d:${i * 0.12}s">${ico(axeIcon(r.id), 'big')}<b>${esc(a.ko)}</b><small>${gr.ko}</small>${r.dup ? `<em>중복 · 파편 +${r.shards}</em>` : '<em class="new">NEW</em>'}</div>`;
-    }).join('')}</div>` : '<div class="altar-art">제단의 룬이 조용히 빛나고 있다.</div>';
-    const hist = gs.history.slice(0, 12).map((h) => `<span style="color:${GRADES[h.grade].color}">${esc(AXE_BY_ID[h.id].ko)}</span>`).join(' · ');
-    return this.head('도끼 제단', '숲의 정령이 도끼를 내려준다. 확률은 아래 표 그대로 적용된다.') + `<div class="body altar">
-      ${res}
-      <div class="pull-btns">
-        <button class="primary big" data-act="pull" data-arg="1" ${s.gold >= GACHA.single.gold ? '' : 'disabled'}>1회 기도 ${ico(itemIcon('gold'))}${fmt(GACHA.single.gold)}</button>
-        <button class="primary big" data-act="pull" data-arg="10" ${s.gold >= GACHA.ten.gold ? '' : 'disabled'}>10회 기도 ${ico(itemIcon('gold'))}${fmt(GACHA.ten.gold)} <small>10% 할인</small></button>
+    const tab = this.tab.altarSub || 'rates';
+    // the showcase axe: the highest grade you own, or a sealed silhouette of a Legendary
+    const ownedBest = AXES.filter((a) => s.axes[a.id]).sort((a, b) => b.grade - a.grade)[0];
+    const show = ownedBest && ownedBest.grade >= 3 ? ownedBest : AXES.find((a) => a.grade === 9);
+    const sealed = !s.axes[show.id];
+    const rareLeft = GACHA.rarePity - gs.sinceRare, epicLeft = GACHA.epicHard - gs.sinceEpic;
+    const soft = gs.sinceEpic + 1 > GACHA.epicSoftStart;
+    const pct = (v) => { const p = (v / total) * 100; return p >= 1 ? p.toFixed(1) : p >= 0.1 ? p.toFixed(2) : p.toFixed(3); };
+    let tabBody;
+    if (tab === 'rates') {
+      const max = Math.log10(Math.max(...w) + 1);
+      tabBody = `<div class="rate-list">${GRADES.map((gr, i) => `<div class="rate" style="--gc:${gr.color}"><span class="grade" style="--gc:${gr.color}">${gr.ko}</span><div class="rate-bar"><i style="width:${Math.max(2, (Math.log10(w[i] + 1) / max) * 100).toFixed(1)}%"></i></div><b>${pct(w[i])}%</b><small>${AXES.filter((a) => a.grade === i).length}종</small></div>`).join('')}</div>
+        <p class="note">막대는 로그 비율이에요. 표시된 확률은 지금 보장 상태가 반영된 실제 값입니다.</p>`;
+    } else if (tab === 'history') {
+      tabBody = gs.history.length ? `<div class="hist-grid">${gs.history.slice(0, 30).map((h) => `<div class="hcell" style="--gc:${GRADES[h.grade].color}" title="${esc(AXE_BY_ID[h.id].ko)}">${ico(axeIcon(h.id))}<small>${esc(AXE_BY_ID[h.id].ko)}</small></div>`).join('')}</div>` : '<div class="empty">아직 기도한 적이 없어요.</div>';
+    } else {
+      tabBody = GRADES.map((gr, gi) => `<div class="pool-row"><span class="grade" style="--gc:${gr.color}">${gr.ko}</span>${AXES.filter((a) => a.grade === gi).map((a) => `<span class="pool-axe ${s.axes[a.id] ? 'have' : ''}" title="${s.codex.axes[a.id] ? esc(a.ko) : '???'}">${ico(axeIcon(a.id, !s.codex.axes[a.id]))}</span>`).join('')}</div>`).join('');
+    }
+    return this.head('도끼 제단', '숲의 정령이 도끼를 내려 줘요. 확률은 아래 그대로 적용돼요.') + `<div class="body altar2">
+      <div class="shrine">
+        <div class="shrine-stage" style="--gc:${GRADES[show.grade].color}">
+          <i class="rune r1"></i><i class="rune r2"></i><i class="rune r3"></i>
+          <div class="shrine-beam"></div>
+          <img class="shrine-axe ${sealed ? 'sealed' : ''}" src="${axeIcon(show.id, sealed)}" alt="">
+          <div class="shrine-cap">${sealed ? `<small>제단 깊은 곳에 잠든</small><b>${GRADES[show.grade].ko} 등급의 도끼</b>` : `<small>내 최고 등급</small><b style="color:${GRADES[show.grade].color}">${esc(show.ko)}</b>`}</div>
+        </div>
+        <div class="shrine-side">
+          <div class="pity-box">
+            <div class="pity-row"><span>희귀 이상 확정까지</span><b>${rareLeft}회</b></div>
+            <div class="pity-bar rare"><i style="width:${(gs.sinceRare / GACHA.rarePity) * 100}%"></i></div>
+            <div class="pity-row"><span>서사 이상 확정까지</span><b>${epicLeft}회</b>${soft ? '<em>확률 상승 중</em>' : ''}</div>
+            <div class="pity-bar epic"><i style="width:${(gs.sinceEpic / GACHA.epicHard) * 100}%"></i><u style="left:${(GACHA.epicSoftStart / GACHA.epicHard) * 100}%"></u></div>
+            <p class="note">${GACHA.epicSoftStart}회부터 서사 이상 확률이 오르고, ${GACHA.epicHard}회째에 반드시 나와요 · 누적 ${fmt(gs.pulls)}회</p>
+          </div>
+          <div class="pull2">
+            <button class="pull-one" data-act="pull" data-arg="1" ${s.gold >= GACHA.single.gold ? '' : 'disabled'}><span>1회 기도</span><b>${ico(itemIcon('gold'))}${fmt(GACHA.single.gold)}</b></button>
+            <button class="pull-ten" data-act="pull" data-arg="10" ${s.gold >= GACHA.ten.gold ? '' : 'disabled'}><i class="ribbon">10% 할인</i><span>10회 기도</span><b>${ico(itemIcon('gold'))}${fmt(GACHA.ten.gold)}</b><small>희귀 이상 1개 이상 확정</small></button>
+          </div>
+          <p class="note">가진 골드 ${ico(itemIcon('gold'))}${fmt(s.gold)} · 중복 도끼는 도끼 파편이 되어 최대 ${STARS.max}성까지 강화할 수 있어요.</p>
+        </div>
       </div>
-      <div class="pity"><div>희귀 이상 보장까지 <b>${GACHA.rarePity - gs.sinceRare}</b>회</div><div>서사 이상 보장까지 <b>${GACHA.epicHard - gs.sinceEpic}</b>회 ${gs.sinceEpic + 1 > GACHA.epicSoftStart ? '<em>확률 상승 중</em>' : `<small>(${GACHA.epicSoftStart}회부터 확률 상승)</small>`}</div><div>누적 기도 <b>${fmt(gs.pulls)}</b>회</div></div>
-      <div class="cols"><table class="rates"><tr><th>등급</th><th>현재 확률</th><th>도끼</th></tr>${rates}</table>
-      <div class="hist"><h3>최근 획득</h3>${hist || '<span class="empty">아직 없음</span>'}<p class="note">중복 도끼는 등급에 따라 도끼 파편으로 바뀝니다. 파편으로 도끼를 최대 ${STARS.max}성까지 강화할 수 있습니다.</p></div></div>
+      <div class="tabs sub">${[['rates', '등급별 확률'], ['history', '최근 획득'], ['pool', '등급별 도끼']].map(([id, l]) => `<button class="${id === tab ? 'on' : ''}" data-act="altarTab" data-arg="${id}">${l}</button>`).join('')}</div>
+      <div class="altar-tab">${tabBody}</div>
     </div>`;
   }
 
@@ -395,6 +425,7 @@ export class UI {
       case 'close': this.close(); return;
       case 'open': if (this.panel) this.close(); this.open(arg); return;
       case 'tab': this.tab[this.panel] = arg; g.audio.play('click'); break;
+      case 'altarTab': this.tab.altarSub = arg; g.audio.play('click'); break;
       case 'skill': g.useSkill(); return;
       case 'sell': {
         const gold = g.economy.sell(arg, n === 'all' ? s.inv[arg] : 1);
@@ -408,9 +439,10 @@ export class UI {
         if (!ok(!!r, '골드가 부족합니다')) break;
         this.lastPull = r;
         const best = Math.max(...r.map((x) => x.grade));
-        g.audio.play('gacha', { grade: best });
         if (best >= 5) { g.player.surpriseT = 1; g.player.cheerT = 1.2; }
-        break;
+        this.render();
+        this.fx.play(r, +arg);
+        return;
       }
       case 'buyClass': if (ok(g.economy.buyClass(arg))) { g.combat.refreshMods(); g.audio.play('levelup'); g.player.cheerT = 1.4; this.toast(`클래스 <b>${esc(CLASS_BY_ID[arg].ko)}</b> 획득!`, 'big'); } break;
       case 'setClass': if (ok(g.economy.setClass(arg))) g.combat.refreshMods(); break;
