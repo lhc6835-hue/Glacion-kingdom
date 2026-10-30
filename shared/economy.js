@@ -144,7 +144,7 @@ export function applyRun(p, r) {
 }
 
 export function sanitizeProfile(p) {
-  const d = newProfile(p && p.name);
+  const d = newProfile((p && p.name) || undefined);
   if (!p || typeof p !== 'object') return d;
   const out = { ...d, ...p };
   for (const k of ['molds', 'flavors', 'weapons', 'faces', 'pity', 'stats', 'votes']) out[k] = { ...d[k], ...(p[k] || {}) };
@@ -154,5 +154,40 @@ export function sanitizeProfile(p) {
   if (!setLoadout(out, out.loadout || {}).ok) out.loadout = d.loadout;
   return out;
 }
+
+// 오늘의 게시판: three candidate flavors per day, chosen from the date so every client agrees.
+export function dayKey(d = new Date()) { return d.toISOString().slice(0, 10); }
+export function dailyCandidates(day = dayKey()) {
+  let h = 0;
+  for (const ch of day) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const pool = FLAVORS.filter((f) => GRADE_INDEX[f.grade] < GRADE_INDEX.og);
+  const out = [];
+  while (out.length < 3) { h = (h * 1103515245 + 12345) >>> 0; const f = pool[h % pool.length]; if (!out.includes(f.id)) out.push(f.id); }
+  return out;
+}
+export function vote(p, flavor, day = dayKey()) {
+  if (!dailyCandidates(day).includes(flavor)) return { ok: false, error: '오늘의 후보가 아니에요' };
+  if (p.votes[day]) return { ok: false, error: '오늘은 이미 투표했어요' };
+  p.votes = { [day]: flavor };
+  p.coins += 80;
+  return { ok: true, reward: 80 };
+}
+
+// 분수대 소원: toss 20 coins, get a fortune and sometimes a little luck back.
+const FORTUNES = [
+  '오늘은 왠지 체리 폭탄이 잘 터질 것 같아요.', '맨 위 스쿱이 오늘따라 단단해 보여요.', '바닐라 향기가 행운을 불러와요.',
+  '열기방울은 생각보다 겁이 많대요.', '구르기는 사랑이에요. 아끼지 마세요.', '오늘 뽑기 운: 말랑말랑', '누군가 당신의 표정을 칭찬하고 있어요.',
+  '민트초코는 언제나 옳아요.', '아이스크림은 녹아도 마음은 녹지 않아요.', '보스 앞에서는 크게 숨을 들이쉬어요. 차갑게!',
+];
+export function wish(p, rand = Math.random) {
+  if (p.coins < 20) return { ok: false, error: '코인이 부족해요' };
+  p.coins -= 20;
+  const r = rand();
+  const reward = r < 0.02 ? 1000 : r < 0.12 ? 120 : r < 0.4 ? 30 : 0;
+  p.coins += reward;
+  return { ok: true, reward, fortune: FORTUNES[Math.floor(rand() * FORTUNES.length)] };
+}
+
+export const ACTIONS = { buyMold, buyFace, gacha, setLoadout, applyRun, vote, wish };
 
 export const CATALOG = { MOLDS, FLAVORS, WEAPONS, FACES, GRADES };

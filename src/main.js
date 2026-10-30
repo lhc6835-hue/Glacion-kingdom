@@ -4,6 +4,8 @@ import { UI } from './ui/ui.js';
 import { resumeAudio } from './core/audio.js';
 import { ArenaScene } from './scenes/arenaScene.js';
 import { TitleScene } from './scenes/title.js';
+import { PlazaScene } from './scenes/plaza.js';
+import { ShopScene } from './scenes/shop.js';
 import { Profile } from './core/profile.js';
 
 class App {
@@ -29,7 +31,7 @@ class App {
     this.canvas.height = Math.round(innerHeight * this.dpr);
   }
 
-  goHome() { this.go(new TitleScene(this)); }
+  goHome(opts) { this.go(new PlazaScene(this, opts)); }
 
   go(scene) {
     if (this.scene && this.scene.exit) this.scene.exit();
@@ -59,6 +61,8 @@ const app = new App();
 window.__app = app;
 const q = new URLSearchParams(location.search);
 if (q.has('play')) app.go(new ArenaScene(app, debugLoadout(q, app.profile)));
+else if (q.has('plaza')) app.goHome();
+else if (q.has('shop')) app.go(new ShopScene(app, +q.get('shop') || 0));
 else app.go(new TitleScene(app));
 
 // ?play&w=bow&m=parfait&f=vanilla,mint,chocolate — try any combination while developing

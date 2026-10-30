@@ -38,7 +38,7 @@ export class Profile {
       this.changed();
       return res;
     }
-    const fn = { buyMold: eco.buyMold, buyFace: eco.buyFace, gacha: eco.gacha, setLoadout: eco.setLoadout, applyRun: eco.applyRun }[name];
+    const fn = eco.ACTIONS[name];
     const res = fn(this.data, ...args);
     if (res.ok) this.changed();
     return res;

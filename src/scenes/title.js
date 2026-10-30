@@ -1,7 +1,6 @@
 // Title screen: a sky full of drifting ice creams behind the logo.
 import { IceCreamRig } from '../render/icecream.js';
 import { h } from '../ui/ui.js';
-import { ArenaScene } from './arenaScene.js';
 import { MOLDS } from '../../shared/molds.js';
 import { FLAVORS } from '../../shared/flavors.js';
 import { FACES } from '../../shared/faces.js';
@@ -24,9 +23,9 @@ export class TitleScene {
   }
   menu() {
     const el = this.app.ui.set('menu', h(`<div class="title-wrap"><div class="row">
-      <button class="btn" data-a="play" style="font-size:22px;padding:14px 34px">바로 시작!</button>
+      <button class="btn" data-a="play" style="font-size:22px;padding:14px 34px">광장으로!</button>
     </div></div>`));
-    el.querySelector('[data-a=play]').onclick = () => { sfx.click(); this.app.go(new ArenaScene(this.app)); };
+    el.querySelector('[data-a=play]').onclick = () => { sfx.click(); this.app.goHome(); };
   }
   update(dt) {
     this.t += dt;

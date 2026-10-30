@@ -1,0 +1,35 @@
+// Clicks through the plaza & shop menus and screenshots each. usage: node tests/ui.mjs outPrefix
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const out = process.argv[2] || 'ui';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+const errs = [];
+p.on('pageerror', (e) => errs.push(e.message + '\n' + e.stack));
+p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+await p.goto('http://localhost:5173/?plaza');
+await p.evaluate(() => { const d = window.__app.profile.data; d.coins = 200000; window.__app.profile.changed(); });
+await p.waitForTimeout(800);
+const use = async (id, name) => {
+  await p.evaluate((id) => { const s = window.__app.scene; s.use({ id }); }, id);
+  await p.waitForTimeout(700);
+  await p.screenshot({ path: `${out}_${name}.png` });
+};
+await use('gflavor', 'gacha');
+await p.click('[data-n="10"]'); await p.waitForTimeout(2200); await p.screenshot({ path: `${out}_gacha10.png` });
+await p.click('.overlay [data-a="ward"]'); await p.waitForTimeout(800); await p.screenshot({ path: `${out}_ward.png` });
+await p.click('.overlay [data-a="save"]'); await p.waitForTimeout(400);
+await use('board', 'board');
+await p.click('.vote button'); await p.waitForTimeout(400);
+await p.evaluate(() => window.__app.ui.remove('modal'));
+await use('faces', 'faces');
+await p.evaluate(() => window.__app.ui.remove('modal'));
+await use('play', 'play');
+await p.evaluate(() => window.__app.ui.remove('modal'));
+await use('gallery', 'gallery');
+await p.evaluate(() => { const s = window.__app.scene; s.spots[3].act(); });
+await p.waitForTimeout(700); await p.screenshot({ path: `${out}_mold.png` });
+await p.click('[data-a="buy"]'); await p.waitForTimeout(700); await p.screenshot({ path: `${out}_moldbought.png` });
+console.log(JSON.stringify(await p.evaluate(() => ({ coins: window.__app.profile.data.coins, flavors: Object.keys(window.__app.profile.data.flavors).length, molds: Object.keys(window.__app.profile.data.molds) }))));
+console.log(errs.slice(0, 5).join('\n---\n') || 'no errors');
+await b.close();
