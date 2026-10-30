@@ -37,7 +37,7 @@ export function drawEnemyFrame(g, type, size, t, flash) {
 
 function bake(art, r, t) {
   const ext = r * (art.ext || 2.2);
-  return makeSprite(ext * 2, ext * 2, ext, ext * (art.oy || 1), (g) => art.draw(g, r, t), { outline: art.outline ?? 1.2, outlineColor: art.oc });
+  return makeSprite(ext * 2, ext * 2, ext, ext * (art.oy || 1), (g) => art.draw(g, r, t), { outline: art.outline ?? 1.1, outlineColor: art.oc });
 }
 
 // Smooth closed curve through polar samples.

@@ -687,6 +687,7 @@ export class Arena {
     list.sort((a, b) => a.y - b.y);
     for (const it of list) it.d();
 
+    this.world.drawSky(g, x0, y0, x1, y1, this.t);
     for (const p of this.projs) drawProjectile(g, p);
     for (const p of this.eprojs) drawProjectile(g, p);
     this.fx.drawAir(g);
@@ -698,15 +699,23 @@ export class Arena {
   }
 
   drawTint(g, W, H) {
+    // the day moves on as the waves go by, but stays bright: warm noon, rosy sunset, lavender dusk
     const n = this.wave;
     const cyc = ((Math.max(1, n) - 1) % 8);
-    const tints = [null, null, 'rgba(255,230,140,0.07)', 'rgba(255,200,120,0.1)', 'rgba(255,150,130,0.14)', 'rgba(255,120,160,0.17)', 'rgba(70,60,140,0.26)', 'rgba(60,50,130,0.3)'];
+    const tints = [null, null, 'rgba(255,240,170,0.06)', 'rgba(255,225,160,0.08)', 'rgba(255,200,170,0.1)', 'rgba(255,175,205,0.12)', 'rgba(170,160,255,0.12)', 'rgba(150,150,255,0.14)'];
     let c = tints[cyc];
-    if (n % 5 === 0 && this.state === 'fight') c = 'rgba(255,90,60,0.12)';
+    if (n % 5 === 0 && this.state === 'fight') c = 'rgba(255,160,120,0.09)';
     if (c) { g.fillStyle = c; g.fillRect(0, 0, W, H); }
-    // soft vignette
-    const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
-    gr.addColorStop(0, 'rgba(80,30,60,0)'); gr.addColorStop(1, 'rgba(80,30,60,0.22)');
+    // sunlight pouring in from the top left
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    const sun = g.createRadialGradient(W * 0.12, -H * 0.1, 0, W * 0.12, -H * 0.1, Math.max(W, H) * 0.9);
+    sun.addColorStop(0, 'rgba(255,250,220,0.12)'); sun.addColorStop(1, 'rgba(255,250,220,0)');
+    g.fillStyle = sun; g.fillRect(0, 0, W, H);
+    g.restore();
+    // a light, rosy vignette instead of a dark one
+    const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.5, W / 2, H / 2, Math.max(W, H) * 0.8);
+    gr.addColorStop(0, 'rgba(255,210,230,0)'); gr.addColorStop(1, 'rgba(255,190,220,0.18)');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
   }
 

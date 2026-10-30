@@ -72,6 +72,14 @@ function bakeScoop(f) {
       g.moveTo(-R * 0.9, R * 0.3);
       g.quadraticCurveTo(0, R * 0.48, R * 0.9, R * 0.3);
       g.stroke();
+      // ridges left by the scoop
+      g.strokeStyle = 'rgba(255,255,255,0.32)';
+      g.lineWidth = R * 0.05;
+      for (const [y, w, tilt] of [[-0.55, 0.62, -0.12], [-0.18, 0.86, 0.08]]) {
+        g.beginPath(); g.ellipse(R * 0.05, R * y, R * w, R * 0.2, tilt, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+      }
+      g.strokeStyle = rgba(dark, 0.14);
+      g.beginPath(); g.ellipse(R * 0.05, R * -0.13, R * 0.86, R * 0.2, 0.08, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
       // glossy highlight
       g.fillStyle = 'rgba(255,255,255,0.75)';
       g.beginPath();
@@ -82,7 +90,7 @@ function bakeScoop(f) {
       g.arc(-R * 0.15, -R * 0.78, R * 0.06, 0, TAU);
       g.fill();
     });
-  }, { outline: 1.15, outlineColor: rgba(shade(c, -0.6), 0.75) });
+  }, { outline: 1.05, outlineColor: rgba(shade(c, -0.48), 0.62) });
 }
 
 function scatter(rnd, n, fn) {

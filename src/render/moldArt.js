@@ -4,7 +4,7 @@ import { makeSprite, atop } from './sprite.js';
 import { shade, rgba, TAU, rng } from '../core/math.js';
 import { R } from './scoopArt.js';
 
-const OUT = 1.15;
+const OUT = 1.05;
 const cache = new Map();
 
 export function moldArt(id) {
@@ -13,7 +13,7 @@ export function moldArt(id) {
   return m;
 }
 
-const oc = (c) => rgba(shade(c, -0.62), 0.75);
+const oc = (c) => rgba(shade(c, -0.5), 0.6);
 
 // ── generic cone ────────────────────────────────────────────
 function cone({ c, L = 62, W = 48, pat = 'grid', rim = true, dip, salt, gold }) {
@@ -88,63 +88,87 @@ function cone({ c, L = 62, W = 48, pat = 'grid', rim = true, dip, salt, gold }) 
       }
     });
   }, { outline: OUT, outlineColor: oc(c) });
-  return { back, seat: -L - R * 0.28, height: L };
+  return { back, seat: -L - R * 0.28, height: L, rim: { y: -L + 3, rx: W / 2 - 2, ry: 0, body: L * 0.45, cone: true } };
 }
 
 // ── cup / tub ──────────────────────────────────────────────
 function cup({ c, h = 30, tw = 50, bw = 36, stripes, ridge, handle, spoon, lip }) {
-  const lipC = lip || shade(c, -0.08);
-  const back = makeSprite(tw + 40, h + 30, tw / 2 + 20, h + 26, (g) => {
+  // a cylinder in gentle perspective: elliptical rim, curved bottom, stripes that bunch up
+  // toward the sides as they wrap round, cylindrical shading and a rolled lip
+  const ry = tw * 0.13, bry = bw * 0.13;
+  const lipC = lip || shade(c, 0.12);
+  const back = makeSprite(tw + 40, h + 40, tw / 2 + 20, h + 30, (g) => {
     if (spoon) {
+      g.save(); g.translate(tw * 0.2, -h - 4); g.rotate(0.5);
       g.fillStyle = '#ff9ec2';
-      g.save(); g.translate(tw * 0.18, -h - 8); g.rotate(0.45);
-      g.fillRect(-2.2, -26, 4.4, 26);
-      g.beginPath(); g.ellipse(0, -30, 6, 8, 0, 0, TAU); g.fill();
+      g.beginPath(); g.roundRect(-2.4, -30, 4.8, 30, 2.4); g.fill();
+      g.beginPath(); g.ellipse(0, -33, 6.5, 8.5, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); g.ellipse(-2, -35, 2, 4, 0, 0, TAU); g.fill();
       g.restore();
     }
-    g.fillStyle = shade(c, -0.45);
-    g.beginPath(); g.ellipse(0, -h, tw / 2, 6, 0, 0, TAU); g.fill();
+    // inside of the cup: back wall lit, bottom in soft shadow
+    g.fillStyle = shade(c, -0.18);
+    g.beginPath(); g.ellipse(0, -h, tw / 2, ry, 0, 0, TAU); g.fill();
+    g.fillStyle = shade(c, 0.1);
+    g.beginPath(); g.ellipse(0, -h, tw / 2, ry, 0, Math.PI, TAU); g.fill();
   }, { outline: OUT, outlineColor: oc(c) });
-  const front = makeSprite(tw + 30, h + 14, tw / 2 + 15, h + 8, (g) => {
-    g.fillStyle = c;
-    g.beginPath();
-    g.moveTo(-tw / 2, -h);
-    g.quadraticCurveTo(0, -h + 6, tw / 2, -h);
-    g.lineTo(bw / 2, -3);
-    g.quadraticCurveTo(bw / 2, 0, bw / 2 - 4, 0);
-    g.lineTo(-bw / 2 + 4, 0);
-    g.quadraticCurveTo(-bw / 2, 0, -bw / 2, -3);
-    g.closePath();
-    g.fill();
+  const front = makeSprite(tw + 34, h + 20, tw / 2 + 17, h + 12, (g) => {
+    const body = () => {
+      g.beginPath();
+      g.moveTo(-tw / 2, -h);
+      g.bezierCurveTo(-tw / 2, -h * 0.55, -bw / 2 - 1, -h * 0.25, -bw / 2, -3);
+      g.ellipse(0, -3, bw / 2, bry, 0, Math.PI, 0, true);
+      g.bezierCurveTo(bw / 2 + 1, -h * 0.25, tw / 2, -h * 0.55, tw / 2, -h);
+      g.ellipse(0, -h, tw / 2, ry, 0, 0, Math.PI);
+      g.closePath();
+    };
     if (handle) {
-      g.strokeStyle = c; g.lineWidth = 4.5;
-      g.beginPath(); g.ellipse(tw / 2 + 2, -h * 0.55, 6, 7.5, 0, -1.4, 1.4); g.stroke();
+      g.strokeStyle = c; g.lineWidth = 5;
+      g.beginPath(); g.ellipse(tw / 2 + 1, -h * 0.52, 7, 8.5, 0, -1.5, 1.5); g.stroke();
     }
+    g.fillStyle = c; body(); g.fill();
     atop(g, (g) => {
-      if (stripes) {
-        for (let i = -3; i <= 3; i++) {
-          g.fillStyle = stripes[Math.abs(i) % stripes.length];
+      const n = 12;
+      for (let i = 0; i < n; i++) {
+        // even angles around the cylinder -> stripes squeeze together at the sides
+        const a0 = -Math.PI / 2 + (i / n) * Math.PI, a1 = -Math.PI / 2 + ((i + 0.5) / n) * Math.PI;
+        if (stripes) {
+          g.fillStyle = stripes[1 % stripes.length];
           g.beginPath();
-          const t0 = i / 7, t1 = (i + 0.5) / 7;
-          g.moveTo(t0 * tw, -h - 2); g.lineTo(t1 * tw, -h - 2); g.lineTo(t1 * bw, 2); g.lineTo(t0 * bw, 2);
+          g.moveTo(Math.sin(a0) * tw / 2, -h + Math.cos(a0) * ry); g.lineTo(Math.sin(a1) * tw / 2, -h + Math.cos(a1) * ry);
+          g.lineTo(Math.sin(a1) * bw / 2, -3 + Math.cos(a1) * bry); g.lineTo(Math.sin(a0) * bw / 2, -3 + Math.cos(a0) * bry);
           g.fill();
         }
+        if (ridge) {
+          g.strokeStyle = rgba(shade(c, -0.22), 0.8); g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(Math.sin(a0) * tw / 2, -h + Math.cos(a0) * ry); g.lineTo(Math.sin(a0) * bw / 2, -3 + Math.cos(a0) * bry); g.stroke();
+        }
       }
-      if (ridge) {
-        g.strokeStyle = shade(c, -0.25); g.lineWidth = 1.6;
-        for (let i = -4; i <= 4; i++) { g.beginPath(); g.moveTo((i / 9) * tw, -h); g.lineTo((i / 9) * bw, 0); g.stroke(); }
-      }
+      // cylindrical shading: bright band left of centre, soft falloff to the edges
       const gr = g.createLinearGradient(-tw / 2, 0, tw / 2, 0);
-      gr.addColorStop(0, 'rgba(255,255,255,0.35)');
-      gr.addColorStop(0.4, 'rgba(255,255,255,0)');
-      gr.addColorStop(1, rgba(shade(c, -0.5), 0.4));
-      g.fillStyle = gr; g.fillRect(-tw, -h - 10, tw * 2, h + 20);
+      gr.addColorStop(0, rgba(shade(c, -0.35), 0.35));
+      gr.addColorStop(0.28, 'rgba(255,255,255,0.35)');
+      gr.addColorStop(0.42, 'rgba(255,255,255,0.08)');
+      gr.addColorStop(0.85, rgba(shade(c, -0.3), 0.28));
+      gr.addColorStop(1, rgba(shade(c, -0.45), 0.45));
+      g.fillStyle = gr; g.fillRect(-tw, -h - 12, tw * 2, h + 24);
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.beginPath(); g.roundRect(-tw * 0.3, -h + 6, 3.2, h * 0.62, 1.6); g.fill();
+      // contact shadow just under the rim
+      const rs = g.createLinearGradient(0, -h, 0, -h + 9);
+      rs.addColorStop(0, rgba(shade(c, -0.4), 0.35)); rs.addColorStop(1, rgba(shade(c, -0.4), 0));
+      g.fillStyle = rs; g.fillRect(-tw, -h, tw * 2, 10);
     });
-    // lip of the cup in front of the scoop
+    // rolled lip in front of the scoop
     g.fillStyle = lipC;
-    g.beginPath(); g.ellipse(0, -h, tw / 2 + 1.5, 3.6, 0, 0, Math.PI); g.lineTo(-tw / 2 - 1.5, -h - 1); g.ellipse(0, -h - 1, tw / 2 + 1.5, 2.4, 0, Math.PI, 0, true); g.fill();
+    g.beginPath();
+    g.ellipse(0, -h, tw / 2 + 1.8, ry + 1.8, 0, 0, Math.PI);
+    g.ellipse(0, -h - 0.5, tw / 2 + 1.8, ry - 1.2, 0, Math.PI, 0, true);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 1.1;
+    g.beginPath(); g.ellipse(0, -h + 0.4, tw / 2, ry, 0, 0.35, Math.PI * 0.75); g.stroke();
   }, { outline: OUT, outlineColor: oc(c) });
-  return { back, front, seat: -h - R * 0.05, height: h };
+  return { back, front, seat: -h - R * 0.3, height: h, rim: { y: -h, rx: tw / 2 + 1.5, ry: ry + 1.5, body: h } };
 }
 
 // ── bowl / glass (optionally on a stem, optionally transparent) ─────────
@@ -204,7 +228,7 @@ function bowl({ c, h = 24, w = 60, stem, glass, pat, rimC, ice, tall }) {
     g.fillStyle = rimC || (glass ? 'rgba(255,255,255,0.8)' : shade(c, 0.15));
     g.beginPath(); g.ellipse(0, -total, w / 2 + 1, 3, 0, 0, Math.PI); g.lineTo(-w / 2 - 1, -total - 0.6); g.ellipse(0, -total - 0.6, w / 2 + 1, 2, 0, Math.PI, 0, true); g.fill();
   }, { outline: OUT, outlineColor: glass ? 'rgba(90,140,170,0.6)' : oc(c) });
-  return { back, front, seat: -total - R * 0.12, height: total, glass };
+  return { back, front, seat: -total - R * 0.24, height: total, glass, rim: { y: -total, rx: w / 2, ry: 4, body: h } };
 }
 
 // ── special shapes ──────────────────────────────────────────
@@ -400,3 +424,56 @@ const BUILDERS = {
   chalice: () => bowl({ c: '#ffffff', h: 30, w: 56, glass: true, stem: { h: 28, w: 6, base: 17 }, rimC: '#c9f4ff' }),
   classic: () => cone({ c: '#e8b469', L: 66, W: 50, gold: true }),
 };
+
+// Cream overflowing the rim of a cup or bowl, with a few drips running down the outside.
+// Drawn after the mold's front so the scoop reads as sitting *in* the cup, not stuck on it.
+const flowCache = new Map();
+export function overflowArt(moldId, flavor) {
+  const key = moldId + ':' + flavor.id;
+  let s = flowCache.get(key);
+  if (s) return s;
+  const rim = moldArt(moldId).rim;
+  const r = rng([...key].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7));
+  const c = flavor.c;
+  const W = rim.rx * 2 + 16, Hh = rim.body + 20;
+  s = makeSprite(W, Hh + 20, W / 2, -rim.y + 16, (g) => {
+    g.fillStyle = c;
+    if (!rim.cone) {
+      // a soft band hugging the front of the rim
+      g.beginPath();
+      g.ellipse(0, rim.y - 1, rim.rx + 1, rim.ry + 3.5, 0, 0, Math.PI);
+      g.ellipse(0, rim.y - 3, rim.rx + 1, rim.ry, 0, Math.PI, 0, true);
+      g.closePath();
+      g.fill();
+    }
+    const n = rim.cone ? 2 : 3;
+    const used = [];
+    for (let i = 0; i < n; i++) {
+      let t, tries = 0;
+      do t = -0.75 + r() * 1.5; while (used.some((u) => Math.abs(u - t) < 0.4) && ++tries < 20);
+      used.push(t);
+      const x = t * rim.rx * 0.85;
+      const y0 = rim.y + Math.sqrt(Math.max(0, 1 - (x / rim.rx) ** 2)) * rim.ry;
+      const len = rim.body * (0.18 + r() * 0.3) * (1 - Math.abs(t) * 0.4);
+      const w = 4 + r() * 3;
+      g.beginPath();
+      g.moveTo(x - w - 3, y0 - 2);
+      g.quadraticCurveTo(x - w, y0, x - w * 0.8, y0 + 4);
+      g.lineTo(x - w * 0.8, y0 + len);
+      g.arc(x, y0 + len, w * 0.8, Math.PI, 0, true);
+      g.lineTo(x + w * 0.8, y0 + 4);
+      g.quadraticCurveTo(x + w, y0, x + w + 3, y0 - 2);
+      g.closePath();
+      g.fill();
+    }
+    atop(g, (g) => {
+      const gr = g.createLinearGradient(0, rim.y - 4, 0, rim.y + rim.body * 0.6);
+      gr.addColorStop(0, rgba(shade(c, 0.3), 0.6)); gr.addColorStop(0.5, rgba(c, 0)); gr.addColorStop(1, rgba(shade(c, -0.3), 0.4));
+      g.fillStyle = gr; g.fillRect(-W, rim.y - 10, W * 2, Hh + 20);
+      g.fillStyle = 'rgba(255,255,255,0.6)';
+      for (const u of used) { const x = u * rim.rx * 0.85; g.beginPath(); g.ellipse(x - 1.6, rim.y + rim.ry + 6, 1.1, 3, 0, 0, TAU); g.fill(); }
+    });
+  }, { outline: 0.9, outlineColor: rgba(shade(c, -0.45), 0.6) });
+  flowCache.set(key, s);
+  return s;
+}

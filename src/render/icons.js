@@ -69,7 +69,7 @@ const DRAW = {
     const w = makeWeapon(def, owner);
     w.ang.snap(-0.55);
     for (let i = 0; i < 40; i++) w.update(1 / 60, fakeA, false, false);
-    if (w.cx !== undefined) { w.cx = 30; w.cy = 40; }
+    if (w.cx && w.cx.snap) { w.cx.snap(30); w.cy.snap(40); }
     g.translate(s * 0.3, s * 0.68);
     const k = s / (def.kind === 'cloud' ? 190 : def.kind === 'whip' || def.kind === 'thrust' ? 150 : 110);
     g.scale(k, k);

@@ -103,11 +103,12 @@ export class FX {
         g.beginPath(); g.ellipse(s.x, s.y, s.r, s.r * 0.6, 0, 0, TAU); g.fill();
       } else if (s.k === 'warn') {
         const k = clamp(s.t / s.life, 0, 1);
-        g.strokeStyle = `rgba(255,90,70,${0.8})`;
-        g.fillStyle = `rgba(255,90,70,${0.12 + k * 0.2})`;
+        const wc = s.mine ? '255,140,190' : '255,90,70';
+        g.strokeStyle = `rgba(${wc},0.8)`;
+        g.fillStyle = `rgba(${wc},${0.12 + k * 0.2})`;
         g.lineWidth = 3;
         g.beginPath(); g.ellipse(s.x, s.y, s.r, s.r * 0.62, 0, 0, TAU); g.fill(); g.stroke();
-        g.fillStyle = 'rgba(255,90,70,0.3)';
+        g.fillStyle = `rgba(${wc},0.3)`;
         g.beginPath(); g.ellipse(s.x, s.y, s.r * k, s.r * 0.62 * k, 0, 0, TAU); g.fill();
       }
     }

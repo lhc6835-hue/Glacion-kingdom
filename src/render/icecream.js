@@ -3,7 +3,7 @@
 import { Spring } from '../core/spring.js';
 import { TAU, clamp } from '../core/math.js';
 import { scoopSprite, R, star } from './scoopArt.js';
-import { moldArt } from './moldArt.js';
+import { moldArt, overflowArt } from './moldArt.js';
 import { drawSprite, whiteOf } from './sprite.js';
 import { drawFace, drawCrown } from './face.js';
 import { FLAVOR } from '../../shared/flavors.js';
@@ -116,7 +116,7 @@ export class IceCreamRig {
     g.scale(scale, scale);
     if (shadow) {
       const lift = this.bob + this.air;
-      g.fillStyle = `rgba(70,40,60,${0.22 * clamp(1 - lift / 120, 0.3, 1)})`;
+      g.fillStyle = `rgba(140,80,130,${0.2 * clamp(1 - lift / 120, 0.3, 1)})`;
       g.beginPath();
       g.ellipse(0, 0, 26 * (1 - lift / 300), 8 * (1 - lift / 300), 0, 0, TAU);
       g.fill();
@@ -149,6 +149,14 @@ export class IceCreamRig {
     if (m.front) {
       drawSprite(g, m.front);
       if (this.flash > 0) this.flashSprite(g, 'mf' + this.look.mold, m.front);
+    }
+    if (m.rim && n > 0) {
+      // cream from the bottom scoop spilling over the rim, riding the scoop's sway
+      const f = FLAVOR[this.look.flavors[0]] || FLAVOR.milk;
+      g.save();
+      g.translate(this.layers[0].x.value * 0.35, 0);
+      drawSprite(g, overflowArt(this.look.mold, f));
+      g.restore();
     }
 
     if (n > 0) {

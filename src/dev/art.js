@@ -17,6 +17,8 @@ if (mode === 'molds') {
   });
 } else if (mode === 'flavors') {
   FLAVORS.forEach((f, i) => rigs.push({ rig: new IceCreamRig({ mold: 'papercup', flavors: [f.id], face: 'smile' }), x: 60 + (i % 14) * 110, y: 170 + Math.floor(i / 14) * 260, label: f.name }));
+} else if (mode === 'cups') {
+  [['papercup', ['strawberry']], ['minicup', ['mintchoco']], ['gelatocup', ['vanilla', 'chocolate', 'mango']], ['wafflebowl', ['cookie', 'ube']], ['bingsu', ['redbean', 'milk', 'mango']], ['affogato', ['vanilla', 'coffee']], ['waffle', ['strawberry', 'vanilla', 'chocolate']], ['glass', ['pistachio', 'cherry']]].forEach(([m, f], i) => rigs.push({ rig: new IceCreamRig({ mold: m, flavors: f, face: 'smile' }), x: 200 + (i % 4) * 400, y: 520 + Math.floor(i / 4) * 560, label: m, s: 2.6 }));
 } else if (mode === 'enemies') {
   ENEMY_ART_TYPES.forEach((t, i) => { const big = t.endsWith('boss') || t.endsWith('king') || t.endsWith('queen'); rigs.push({ enemy: t, size: big ? 70 : t === 'ember' ? 14 : t === 'magma' ? 34 : 22, x: 120 + (i % 6) * 250, y: 200 + Math.floor(i / 6) * 400, label: t }); });
 } else {
