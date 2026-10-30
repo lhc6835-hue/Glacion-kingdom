@@ -10,7 +10,7 @@ const base = `http://127.0.0.1:${server.address().port}/index.html`;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
-page.on('pageerror', (e) => errors.push(e.message));
+page.on('pageerror', (e) => errors.push(e.message + ' @ ' + (e.stack || '').split('\n').slice(1, 4).join(' ')));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 let pass = 0, fail = 0;
@@ -72,6 +72,8 @@ try {
   await wait(2500);
   const fell = await G(() => ({ logs: window.__axenfall.state.inv.log_sapling || 0, felled: window.__axenfall.state.stats.felled.sapling || 0 }));
   check('sapling falls and drops logs', fell.felled === 1 && fell.logs >= 3, JSON.stringify(fell));
+  const stumped = await page.waitForFunction(() => window.__axenfall.trees.list.some((t) => t.species === 'sapling' && t.state === 'stump' && !t.fall), null, { timeout: 8000 }).then(() => true, () => false);
+  check('felled tree lands, rests, dissolves to a stump', stumped);
 
   // ── trader: sell ──
   await G(() => { const g = window.__axenfall; g.player.x = 175; });
@@ -148,16 +150,47 @@ try {
   await wait(60);
   check('Q uses the class ability (Focus)', await G(() => window.__axenfall.combat.focusUntil > window.__axenfall.now));
 
+  // ── World 2: the rock path, travel, and back ──
+  await G(() => { const g = window.__axenfall; g.player.x = 2290; });
+  await wait(100);
+  await page.keyboard.press('e');
+  await page.waitForSelector('[data-panel="gate"]');
+  check('locked rock path opens its unlock panel', await G(() => document.querySelector('[data-act="unlockGate"]').disabled));
+  await G(() => { const g = window.__axenfall; g.state.stats.felled.silverleaf = 3; g.state.gold += 3000; g.state.essence += 12; g.ui.render(); });
+  await page.click('[data-act="unlockGate"]');
+  check('paying clears the path', await G(() => window.__axenfall.state.unlocks.sunveil === true && !window.__axenfall.ui.panel));
+  await wait(200);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => window.__axenfall.state.region === 'sunveil' && !window.__axenfall.traveling, null, { timeout: 5000 }).catch(async (e) => { console.log(await G(() => { const g = window.__axenfall; return JSON.stringify({ r: g.state.region, tr: g.traveling, x: g.player.x, p: g.ui.panel, u: g.state.unlocks, en: g.input.enabled }); }), errors); throw e; });
+  const sv = await G(() => { const g = window.__axenfall; return { trees: g.trees.list.map((t) => t.species), x: Math.round(g.player.x), card: document.getElementById('discover').classList.contains('show'), hud: document.getElementById('region').textContent }; });
+  check('E on the open path travels to Sunveil Forest', sv.trees.includes('oak') && sv.trees.includes('dawnwood') && sv.x === 150 && sv.card, JSON.stringify(sv));
+  check('HUD names the new region', sv.hud.includes('해비침 숲'), sv.hud);
+  await G(() => { const g = window.__axenfall; g.player.x = 300; });
+  await wait(100);
+  await page.keyboard.press('e');
+  await page.waitForSelector('[data-panel="trader"]');
+  check('Sunveil has its own trader', await G(() => document.querySelector('.panel h2').textContent.includes('하니')));
+  await page.keyboard.press('Escape');
+  await G(() => { const g = window.__axenfall; g.player.x = 96; });
+  await wait(100);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => window.__axenfall.state.region === 'evergreen' && !window.__axenfall.traveling, null, { timeout: 5000 });
+  check('the west path leads back to the valley gate', await G(() => Math.round(window.__axenfall.player.x) === 2250));
+  await G(() => { window.__axenfall.player.x = 2290; });
+  await wait(100);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => window.__axenfall.state.region === 'sunveil' && !window.__axenfall.traveling, null, { timeout: 5000 });
+
   // ── night ──
   await G(() => window.__axenfall.day.set(22));
   await wait(150);
   check('time of day can be night', await G(() => window.__axenfall.day.cur.night > 0.9));
 
   // ── save + reload ──
-  const snap = await G(() => { const g = window.__axenfall; g.save(); return { gold: g.state.gold, axes: Object.keys(g.state.axes).length, mill: g.state.sawmill.level, cls: g.state.classes.active }; });
+  const snap = await G(() => { const g = window.__axenfall; g.save(); return { gold: g.state.gold, axes: Object.keys(g.state.axes).length, mill: g.state.sawmill.level, cls: g.state.classes.active, region: g.state.region }; });
   await page.goto(base + '?play');
   await page.waitForFunction(() => window.__axenfall && window.__axenfall.mode === 'play');
-  const back = await G(() => { const g = window.__axenfall; return { gold: g.state.gold, axes: Object.keys(g.state.axes).length, mill: g.state.sawmill.level, cls: g.state.classes.active }; });
+  const back = await G(() => { const g = window.__axenfall; return { gold: g.state.gold, axes: Object.keys(g.state.axes).length, mill: g.state.sawmill.level, cls: g.state.classes.active, region: g.state.region }; });
   check('progress survives a reload', JSON.stringify(snap) === JSON.stringify(back), JSON.stringify(back));
 
   // ── performance: let it run and measure ──

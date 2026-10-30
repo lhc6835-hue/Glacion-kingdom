@@ -409,3 +409,34 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
 .portrait.touch-mode .prompt { bottom: 10px; max-width: calc(100vw - 32px); font-size: .85em; }
 .portrait .equip { bottom: auto; top: calc(12px + 3em); transform: scale(.85); transform-origin: top left; }
 .portrait .toasts { top: calc(12px + 6em); }
+
+/* region travel: fade veil and the title card that names the new forest */
+.veil { position: fixed; inset: 0; background: #050a09; opacity: 0; pointer-events: none; transition: opacity .6s ease; z-index: 30; }
+.veil.on { opacity: 1; }
+.discover { position: fixed; left: 0; right: 0; top: 24%; display: flex; flex-direction: column; align-items: center; gap: .35em; text-align: center; pointer-events: none; z-index: 31; padding: 0 16px; }
+.discover small { font-family: var(--display); font-weight: 600; letter-spacing: .55em; padding-left: .55em; text-transform: uppercase; color: #f4dc9c; font-size: calc(13px * var(--ui)); text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.discover h2 { margin: 0; font-family: var(--serif); font-weight: 800; font-size: calc(46px * var(--ui)); letter-spacing: .12em; color: #fff6dc; text-shadow: 0 0 24px rgba(255,210,120,.45), 0 3px 0 rgba(0,0,0,.35), 0 4px 18px rgba(0,0,0,.6); }
+.discover p { margin: 0; color: #e8dcb8; font-size: calc(13px * var(--ui)); letter-spacing: .2em; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+.discover .d-rule { width: min(360px, 70vw); height: 1px; background: linear-gradient(90deg, transparent, var(--brass2), transparent); position: relative; }
+.discover .d-rule i { position: absolute; left: 50%; top: -3px; width: 7px; height: 7px; transform: translateX(-50%) rotate(45deg); background: var(--brass2); box-shadow: 0 0 10px var(--brass2); }
+.discover > * { opacity: 0; }
+.discover.show small { animation: dIn .9s cubic-bezier(.2,.8,.2,1) .1s both, dOut .8s ease 2.7s forwards; }
+.discover.show .d-rule { animation: dRule 1s cubic-bezier(.2,.8,.2,1) .25s both, dOut .8s ease 2.75s forwards; }
+.discover.show h2 { animation: dTitle 1.2s cubic-bezier(.2,.8,.2,1) .35s both, dOut .8s ease 2.8s forwards; }
+.discover.show p { animation: dIn .9s ease .8s both, dOut .8s ease 2.85s forwards; }
+@keyframes dIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes dRule { from { opacity: 0; transform: scaleX(0); } to { opacity: 1; transform: none; } }
+@keyframes dTitle { from { opacity: 0; letter-spacing: .5em; filter: blur(6px); } to { opacity: 1; letter-spacing: .12em; filter: none; } }
+@keyframes dOut { to { opacity: 0; transform: translateY(-6px); } }
+
+/* rock path unlock panel */
+.gate-panel h3 { margin: 1em 0 .4em; font-family: var(--display); font-size: .78em; letter-spacing: .3em; color: var(--brass); text-transform: uppercase; }
+.gate-hero { padding: 1em 1.1em; border: 1px solid var(--line2); border-radius: var(--r); background: radial-gradient(ellipse at 80% 0%, rgba(255,200,96,.22), transparent 60%), linear-gradient(#1f2a1c, #121c16); }
+.gate-hero small { display: block; font-family: var(--display); letter-spacing: .3em; font-size: .72em; color: var(--brass); text-transform: uppercase; }
+.gate-hero b { font-family: var(--serif); font-size: 1.5em; color: #ffe8a8; margin-right: .5em; }
+.gate-hero span { font-family: var(--display); color: var(--dim); font-size: .85em; }
+.gate-hero p { margin: .5em 0 0; color: var(--dim); line-height: 1.55; }
+.row.req .chk { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; margin-right: .6em; border: 1px solid var(--line2); border-radius: 50%; color: #1d1406; font-weight: 800; flex: none; }
+.row.req.done .chk { background: var(--moss); border-color: var(--moss); }
+.row.req.done .price { color: var(--moss); }
+button.wide { display: block; width: 100%; margin-top: 1em; padding: .8em; font-size: 1.05em; }

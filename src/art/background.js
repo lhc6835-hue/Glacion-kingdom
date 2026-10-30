@@ -1,5 +1,5 @@
 // Parallax strips for the shaded valley. Each strip tiles seamlessly over STRIP_W pixels.
-import { PixBuf } from '../gfx/PixBuf.js';
+import { PixBuf, makeCanvas } from '../gfx/PixBuf.js';
 import { mulberry32, hash2, fbm1 } from '../core/Rng.js';
 import { silhouetteTree } from './trees.js';
 
@@ -97,9 +97,8 @@ function nearTrunks() {
 }
 
 // Canopy ceiling hung from the top of the screen. The gaps are where light shafts fall through.
-function canopy() {
+function canopy(gaps = [70, 190, 330, 470, 600, 760, 880, 975]) {
   const H = 80, b = new PixBuf(STRIP_W, H);
-  const gaps = [70, 190, 330, 470, 600, 760, 880, 975];
   const gapAt = (x) => {
     let d = 1;
     for (const g of gaps) { const dd = Math.min(Math.abs(x - g), STRIP_W - Math.abs(x - g)) / 16; d = Math.min(d, dd); }
@@ -180,16 +179,62 @@ export function cloudSprite(seed) {
   return b.toCanvas();
 }
 
-export function buildStrips() {
+// Rolling sunlit hills with round-crowned groves, for open forests instead of valley walls.
+function hills() {
+  const H = 170, b = new PixBuf(STRIP_W, H);
+  const cols = ['#6a7a4a', '#7a8a52', '#8c9a5c', '#a4ae6c'];
+  for (let x = 0; x < STRIP_W; x++) {
+    const top = Math.round(60 + fbm1(x / 120, 33, 4, STRIP_W / 120) * 60);
+    for (let y = top; y < H; y++) {
+      const band = Math.floor((y + fbm1(x / 60, 9, 2, STRIP_W / 60) * 12) / 14);
+      let k = band % 2 ? 1 : 2;
+      if (y - top < 2) k = 3;
+      if (hash2(x >> 1, y >> 1, 4) < 0.04) k = 0;
+      b.set(x, y, cols[k]);
+    }
+  }
+  const rnd = mulberry32(41);
+  for (let i = 0; i < 46; i++) {
+    const x = Math.floor(rnd() * STRIP_W);
+    const top = Math.round(60 + fbm1(x / 120, 33, 4, STRIP_W / 120) * 60);
+    silhouetteTree(b, x, top + 3, 12 + rnd() * 18, 'round', ['#5a6a3a', '#7a8a48'], 200 + i);
+  }
+  return { c: b.toCanvas(), H, f: 0.12, falls: [] };
+}
+
+// Shifts a strip (anything with a .c canvas) toward a warm golden light: greens lean yellow, everything brightens a little.
+// Recolours a strip toward warm gold with canvas blending (no pixel readback, which is slow on
+// GPU canvases): multiply out some blue, then lift everything toward amber. Alpha is kept.
+export function warmify(strip, amount = 1) {
+  const c = strip.c, g = c.getContext('2d');
+  const copy = makeCanvas(c.width, c.height);
+  copy.getContext('2d').drawImage(c, 0, 0);
+  g.save();
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = `rgb(255, ${Math.round(255 - 22 * amount)}, ${Math.round(255 - 62 * amount)})`;
+  g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'destination-in';
+  g.drawImage(copy, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  g.globalAlpha = 0.15 * amount;
+  g.fillStyle = '#ffa840';
+  g.fillRect(0, 0, c.width, c.height);
+  g.restore();
+  return strip;
+}
+
+// look: the region's look (see data/regions.js). Warm regions are recoloured toward gold.
+export function buildStrips(look = {}) {
+  const warm = look.warm ? 1 : 0;
+  const w = (st, k = 1) => (warm ? warmify(st, k) : st);
   return {
-    peaks: peaks(),
-    cliffs: cliffs(),
-    far: forestStrip(90, 70, 24, 44, ['#3a6664', '#4a7672'], 3, 0.2, { band: 10 }),
-    mid: forestStrip(150, 34, 60, 120, ['#1e3e3a', '#2c5248'], 9, 0.35, { band: 18, pine: 0.5 }),
-    near: nearTrunks(),
-    canopy: canopy(),
-    fg: foreground(),
+    peaks: w(peaks(), 0.8),
+    cliffs: look.far === 'hills' ? w(hills(), 0.6) : cliffs(),
+    far: w(forestStrip(90, 70, 24, 44, ['#3a6664', '#4a7672'], 3, 0.2, { band: 10, pine: warm ? 0.15 : 0.6 }), 0.9),
+    mid: w(forestStrip(150, 34, 60, 120, ['#1e3e3a', '#2c5248'], 9, 0.35, { band: 18, pine: warm ? 0.1 : 0.5 })),
+    near: w(nearTrunks(), 0.8),
+    canopy: Object.assign(w(canopy(look.gaps)), { fill: warm ? '#2c2a14' : '#0e221c' }),
+    fg: (() => { const f = foreground(); if (warm) { warmify(f.bot, 0.7); warmify(f.top, 0.7); } return f; })(),
     clouds: [1, 2, 3, 4, 5].map((s) => cloudSprite(s)),
   };
 }
-

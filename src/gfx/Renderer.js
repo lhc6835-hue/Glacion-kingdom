@@ -1,5 +1,5 @@
 // Draws the valley: sky → parallax strips with haze between them → world → grade → light layer.
-import { buildStrips, STRIP_W } from '../art/background.js';
+import { buildStrips, STRIP_W, warmify } from '../art/background.js';
 import { buildGround, buildTufts } from '../art/ground.js';
 import { buildTree } from '../art/trees.js';
 import { drawHero, drawAxe } from '../art/hero.js';
@@ -7,38 +7,31 @@ import * as Props from '../art/props.js';
 import { buildGlows } from './Glow.js';
 import { makeCanvas } from './PixBuf.js';
 import { PAL } from '../art/palette.js';
-import { WORLD, groundY, STATIONS, CREEK } from '../game/World.js';
+import { WORLD, REGION, groundY, STATIONS, CREEK } from '../game/World.js';
 import { TREES } from '../data/trees.js';
 import { AXE_BY_ID } from '../data/axes.js';
 import { GRADES } from '../data/grades.js';
 import { hash2 } from '../core/Rng.js';
+import { GROW } from '../game/Trees.js';
 
-const easeIn = (t) => t * t;
+const smooth = (t) => t * t * (3 - 2 * t);
+// damped spring from 0 to 1 with one soft overshoot
+const spring = (v, k = 5.5, w = 10.5) => 1 - Math.exp(-k * v) * Math.cos(w * v);
 const STAR_N = 90;
 
 export class Renderer {
   constructor(engine) {
     this.e = engine;
-    this.strips = buildStrips();
-    this.ground = buildGround();
-    this.tufts = buildTufts();
     this.glows = buildGlows();
-    this.treeArt = new Map();
+    // props shared by every region; warm variants are recoloured copies
+    const warmCopy = (pr) => { const c = makeCanvas(pr.c.width, pr.c.height); c.getContext('2d').drawImage(pr.c, 0, 0); return warmify({ ...pr, c }, 0.8); };
+    const tent = Props.tent();
     this.props = {
-      tent: Props.tent(), traderFrames: [Props.trader(0), Props.trader(1)], altar: Props.altar(), board: Props.guildBoard(),
-      millBroken: Props.sawmill(true), mill: Props.sawmill(false), elder: Props.elderTree(), gate: Props.gate(),
-      lantern: Props.lantern(), logPile: Props.logPile(),
+      tent, tentWarm: warmCopy(tent), traderFrames: [Props.trader(0), Props.trader(1)], altar: Props.altar(), board: Props.guildBoard(),
+      millBroken: Props.sawmill(true), mill: Props.sawmill(false), elder: Props.elderTree(), gate: Props.gate(false), gateOpen: Props.gate(true),
+      lantern: Props.lantern(), logPile: Props.logPile(), signpost: Props.signpost(), sundial: Props.sundial(),
     };
-    this.station = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
-    // set dressing: rocks and mushrooms scattered on the bank
-    this.decor = [];
-    for (let i = 0; i < 70; i++) {
-      const x = 80 + hash2(i, 0, 91) * (WORLD.width - 160);
-      if (STATIONS.some((s) => Math.abs(s.x - x) < 40)) continue;
-      const isRock = hash2(i, 1, 91) < 0.55;
-      this.decor.push({ x: Math.round(x), art: isRock ? Props.rock(i + 3) : Props.mushroom(i), back: hash2(i, 2, 91) < 0.6 });
-    }
-    this.lanterns = [128, 262, 520, 702, 1140, 1500, 1800, 2235];
+    this.setRegion();
     this.stars = [];
     for (let i = 0; i < STAR_N; i++) this.stars.push({ x: hash2(i, 0, 5), y: hash2(i, 1, 5) * 0.7, p: hash2(i, 2, 5) * 6.28, b: hash2(i, 3, 5) });
     this.motes = [];
@@ -49,6 +42,24 @@ export class Renderer {
     this.quality = 'high';
     this.lastCamX = 0;
     this.skyStrip = makeCanvas(1, 22);
+  }
+
+  // Rebuilds everything that depends on the current region (strips, ground, dressing).
+  setRegion() {
+    this.regionId = REGION.id;
+    this.strips = buildStrips(REGION.look);
+    this.ground = buildGround();
+    this.tufts = buildTufts();
+    this.treeArt = new Map();
+    this.station = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
+    this.decor = [];
+    for (let i = 0; i < 70; i++) {
+      const x = 80 + hash2(i, 0, 91 + REGION.order) * (WORLD.width - 160);
+      if (STATIONS.some((s) => Math.abs(s.x - x) < 40)) continue;
+      const isRock = hash2(i, 1, 91) < (REGION.look.warm ? 0.4 : 0.55);
+      this.decor.push({ x: Math.round(x), art: isRock ? Props.rock(i + 3) : Props.mushroom(i), back: hash2(i, 2, 91) < 0.6 });
+    }
+    this.lanterns = REGION.lanterns;
   }
 
   art(tree) {
@@ -112,7 +123,7 @@ export class Renderer {
     this.motesDraw(g, f, camX, camY, t);
     // canopy ceiling and nearest foreground
     const canopyTop = this.strip(g, this.strips.canopy, camX, 0, 0, this.strips.canopy.H - 14 + Math.round((camY0 - camY) * 0.6));
-    if (canopyTop > 0) { g.fillStyle = '#0e221c'; g.fillRect(0, 0, W, canopyTop); }
+    if (canopyTop > 0) { g.fillStyle = this.strips.canopy.fill; g.fillRect(0, 0, W, canopyTop); }
     const fgx = camX * 1.15;
     this.stripScreen(g, this.strips.fg.bot, fgx, H - this.strips.fg.bot.H + Math.round((camY0 - camY) * 1.15) + 6);
     this.stripScreen(g, this.strips.fg.top, fgx + 300, -6 + Math.round((camY0 - camY) * 1.15) - 26);
@@ -121,6 +132,14 @@ export class Renderer {
     g.globalCompositeOperation = 'multiply';
     g.fillStyle = d.grade;
     g.fillRect(0, 0, W, H);
+    // warm regions get a golden overlay, fading out at night
+    if (REGION.look.warm) {
+      g.globalCompositeOperation = 'overlay';
+      g.globalAlpha = 0.22 * (1 - d.night * 0.8);
+      g.fillStyle = REGION.look.warm;
+      g.fillRect(0, 0, W, H);
+      g.globalAlpha = 1;
+    }
     g.globalCompositeOperation = 'source-over';
     this.light(f, camX, camY, horizon, t);
   }
@@ -203,33 +222,42 @@ export class Renderer {
   }
 
   backProps(g, f, camX, camY, vis, t) {
-    const P = this.props, st = this.station;
-    if (vis(st.elder.x, 120)) this.propAt(g, P.elder, st.elder.x, camX, camY, 3);
-    if (vis(st.gate.x, 80)) this.propAt(g, P.gate, st.gate.x, camX, camY, 2);
-    if (vis(st.sawmill.x, 100)) {
-      const broken = f.sawmillLevel === 0;
-      const m = broken ? P.millBroken : P.mill;
-      this.propAt(g, m, st.sawmill.x, camX, camY, 2);
-      const wx = st.sawmill.x + m.wheel.x - camX, wy = groundY(st.sawmill.x) + m.wheel.y - camY + 2;
-      this.wheelAngle = (this.wheelAngle || 0) + (broken ? 0 : f.dt * (f.millBusy ? 1.6 : 0.5));
-      Props.drawWheel(g, wx, wy, m.wheel.r, this.wheelAngle, broken);
+    const P = this.props;
+    for (const st of STATIONS) {
+      if (!vis(st.x, 120)) continue;
+      switch (st.kind) {
+        case 'elder': this.propAt(g, P.elder, st.x, camX, camY, 3); break;
+        case 'gate': this.propAt(g, f.gateOpen ? P.gateOpen : P.gate, st.x, camX, camY, 2); break;
+        case 'path': this.propAt(g, P.signpost, st.x, camX, camY, 2); break;
+        case 'sundial': this.propAt(g, P.sundial, st.x, camX, camY, 2); break;
+        case 'guild': this.propAt(g, P.board, st.x, camX, camY, 2); break;
+        case 'sawmill': {
+          const broken = f.sawmillLevel === 0;
+          const m = broken ? P.millBroken : P.mill;
+          this.propAt(g, m, st.x, camX, camY, 2);
+          const wx = st.x + m.wheel.x - camX, wy = groundY(st.x) + m.wheel.y - camY + 2;
+          this.wheelAngle = (this.wheelAngle || 0) + (broken ? 0 : f.dt * (f.millBusy ? 1.6 : 0.5));
+          Props.drawWheel(g, wx, wy, m.wheel.r, this.wheelAngle, broken);
+          break;
+        }
+        case 'trader': {
+          this.propAt(g, REGION.look.warm ? P.tentWarm : P.tent, st.x, camX, camY, 2);
+          const fr = P.traderFrames[Math.floor(t * 1.5) % 2];
+          g.drawImage(fr, Math.round(st.x + 26 - camX), Math.round(groundY(st.x + 30) - 25 - camY));
+          const fx = st.x - 44;
+          this.fire(g, fx - camX, groundY(fx) - camY, t);
+          this.propAt(g, P.logPile, st.x - 70, camX, camY, 1);
+          break;
+        }
+        case 'altar': {
+          this.propAt(g, P.altar, st.x, camX, camY, 2);
+          const ay = groundY(st.x) + P.altar.focus.y - camY + Math.round(Math.sin(t * 2) * 2);
+          drawAxe(g, st.x - camX - 2, ay + 4, 0.55 + Math.sin(t * 0.8) * 0.15, { blade: '#bff8e8', accent: '#4a7a6a' }, 0.9);
+          break;
+        }
+        default: break;
+      }
     }
-    if (vis(st.trader.x, 60)) {
-      this.propAt(g, P.tent, st.trader.x, camX, camY, 2);
-      const fr = P.traderFrames[Math.floor(t * 1.5) % 2];
-      g.drawImage(fr, Math.round(st.trader.x + 26 - camX), Math.round(groundY(st.trader.x + 30) - 25 - camY));
-      // campfire
-      const fx = st.trader.x - 44, fy = groundY(fx) - camY;
-      this.fire(g, fx - camX, fy, t);
-      this.propAt(g, P.logPile, st.trader.x - 70, camX, camY, 1);
-    }
-    if (vis(st.altar.x, 40)) {
-      this.propAt(g, P.altar, st.altar.x, camX, camY, 2);
-      // the altar's floating axe glyph
-      const ay = groundY(st.altar.x) + P.altar.focus.y - camY + Math.round(Math.sin(t * 2) * 2);
-      drawAxe(g, st.altar.x - camX - 2, ay + 4, 0.55 + Math.sin(t * 0.8) * 0.15, { blade: '#bff8e8', accent: '#4a7a6a' }, 0.9);
-    }
-    if (vis(st.guild.x, 40)) this.propAt(g, P.board, st.guild.x, camX, camY, 2);
     for (const lx of this.lanterns) if (vis(lx, 10)) this.propAt(g, P.lantern, lx, camX, camY, 2);
   }
 
@@ -251,39 +279,30 @@ export class Renderer {
     const by = groundY(tr.x) - camY + 2;
     const bx = Math.round(tr.x - camX);
     const a = this.art(tr);
-    if (tr.state === 'stump' || (tr.state === 'growing' && tr.grow < 0.65)) {
-      g.drawImage(a.stump.c, bx - Math.floor(a.stump.W / 2), by - a.stump.H + 1);
-      if (tr.state === 'growing') this.sprout(g, bx + 6, by - 1, tr.grow / 0.65);
+    const stumpAt = (dy = 0) => g.drawImage(a.stump.c, bx - Math.floor(a.stump.W / 2), by - a.stump.H + 1 + dy);
+    // the falling trunk and the rising tree are drawn at screen resolution in treeFx()
+    if (tr.state === 'stump' || tr.state === 'falling') { stumpAt(); return; }
+    if (tr.state === 'growing') {
+      if (tr.growT < GROW.sprout) {
+        // the old stump settles into the earth while a sprout pops out beside it
+        const v = tr.growT / GROW.sprout;
+        const sink = Math.round(smooth(Math.min(1, v * 1.4)) * (a.stump.H + 1));
+        if (sink < a.stump.H + 1) {
+          g.save(); g.beginPath(); g.rect(bx - a.stump.W, by - a.stump.H - 4, a.stump.W * 2, a.stump.H + 4); g.clip();
+          stumpAt(sink); g.restore();
+        }
+        this.sprout(g, bx, by - 1, Math.max(0, spring(Math.max(0, v - 0.25) / 0.75, 6, 12)));
+      }
       return;
     }
-    if (tr.state === 'falling') {
-      const ft = f.trees.fallTime(tr);
-      const el = f.now - tr.felledAt;
-      const u = Math.min(1, el / ft);
-      const ang = easeIn(u) * (Math.PI / 2 - 0.08) * tr.fallDir;
-      const fade = el > ft ? Math.max(0, 1 - (el - ft) / 1.2) : 1;
-      g.drawImage(a.stump.c, bx - Math.floor(a.stump.W / 2), by - a.stump.H + 1);
-      if (fade <= 0) return;
-      g.save();
-      g.globalAlpha = fade;
-      g.translate(bx, by - 3);
-      g.rotate(ang);
-      g.drawImage(a.trunk, -a.ax, -a.ay + 3);
-      for (const p of a.pieces) g.drawImage(p.c, -a.ax, -a.ay + 3);
-      g.restore();
-      return;
-    }
-    const sink = tr.state === 'growing' ? Math.round((1 - (tr.grow - 0.65) / 0.35) * a.H * 0.5) : 0;
     const shake = tr.shake > 0 ? Math.round(Math.sin(t * 70) * tr.shake * 2) : 0;
-    const x0 = bx - a.ax, y0 = by - a.ay + sink;
-    if (sink) { g.save(); g.beginPath(); g.rect(x0 - 10, y0 - 10, a.W + 20, by - y0 + 10); g.clip(); }
+    const x0 = bx - a.ax, y0 = by - a.ay;
     g.drawImage(a.trunk, x0 + (shake ? Math.sign(shake) : 0), y0);
     for (let i = 0; i < a.pieces.length; i++) {
       const p = a.pieces[i];
       const sway = Math.round(Math.sin(t * (0.9 + i * 0.17) + p.phase) * p.amp * this.wind);
       g.drawImage(p.c, x0 + sway + shake, y0);
     }
-    if (sink) g.restore();
     // status overlays
     if (tr.frost && tr.frost.until > f.now) {
       g.fillStyle = '#c8f4ff';
@@ -298,7 +317,8 @@ export class Renderer {
   }
 
   sprout(g, x, y, u) {
-    const h = Math.max(1, Math.round(u * 12));
+    if (u <= 0.02) return;
+    const h = Math.max(1, Math.round(u * 15));
     g.fillStyle = PAL.grass[3];
     g.fillRect(x, y - h, 1, h);
     if (h > 3) { g.fillStyle = PAL.grass[4]; g.fillRect(x - 2, y - h + 1, 2, 1); g.fillRect(x + 1, y - h, 2, 1); }
@@ -318,7 +338,30 @@ export class Renderer {
 
   // The hero is drawn at screen resolution (see Engine.present) so squash, tilt and sub-pixel
   // movement stay smooth; it gets the same colour grade as the pixel world.
+  // Colour-grades whatever is drawn on `mask` exactly like the world canvas, cut to its silhouette.
+  gradeLayer(out, mask, w, h, d) {
+    out.setTransform(1, 0, 0, 1, 0, 0);
+    out.globalCompositeOperation = 'source-over';
+    out.globalAlpha = 1;
+    out.clearRect(0, 0, w, h);
+    out.drawImage(mask, 0, 0);
+    out.globalCompositeOperation = 'multiply';
+    out.fillStyle = d.grade;
+    out.fillRect(0, 0, w, h);
+    if (REGION.look.warm) {
+      out.globalCompositeOperation = 'overlay';
+      out.globalAlpha = 0.22 * (1 - d.night * 0.8);
+      out.fillStyle = REGION.look.warm;
+      out.fillRect(0, 0, w, h);
+      out.globalAlpha = 1;
+    }
+    out.globalCompositeOperation = 'destination-in';
+    out.drawImage(mask, 0, 0);
+    out.globalCompositeOperation = 'source-over';
+  }
+
   drawActor(dg, scale, f) {
+    this.treeFx(dg, scale, f);
     const BW = 72, BH = 72, OX = 36, OY = 56;
     const w = BW * scale, h = BH * scale;
     if (!this.actor || this.actor.width !== w || this.actor.height !== h) { this.actor = makeCanvas(w, h); this.actorMask = makeCanvas(w, h); }
@@ -330,20 +373,61 @@ export class Renderer {
     mg.imageSmoothingEnabled = false;
     drawHero(mg, OX, OY, p.facing, p.pose, axe);
     if (p.surpriseT > 0) { mg.fillStyle = '#fff4c0'; mg.fillRect(OX - 1, OY - 30, 2, 5); mg.fillRect(OX - 1, OY - 23, 2, 2); }
-    // grade: multiply a copy, then cut it back to the hero's silhouette in a single draw
-    ag.setTransform(1, 0, 0, 1, 0, 0);
-    ag.globalCompositeOperation = 'source-over';
-    ag.clearRect(0, 0, w, h);
-    ag.drawImage(this.actorMask, 0, 0);
-    ag.globalCompositeOperation = 'multiply';
-    ag.fillStyle = f.day.cur.grade;
-    ag.fillRect(0, 0, w, h);
-    ag.globalCompositeOperation = 'destination-in';
-    ag.drawImage(this.actorMask, 0, 0);
-    ag.globalCompositeOperation = 'source-over';
+    this.gradeLayer(ag, this.actorMask, w, h, f.day.cur);
     const c = this.camRounded;
     const sx = Math.round((p.x - c.x - OX) * scale), sy = Math.round((p.y - c.y - OY) * scale);
     dg.drawImage(this.actor, sx, sy);
+  }
+
+  // Falling and regrowing trees, drawn at screen resolution so rotation and scale move smoothly
+  // instead of snapping a whole art pixel at a time.
+  treeFx(dg, scale, f) {
+    const c = this.camRounded, W = this.e.W;
+    const list = f.trees.list.filter((tr) => (tr.state === 'falling' || (tr.state === 'growing' && tr.growT >= GROW.sprout)) && tr.x > c.x - 160 && tr.x < c.x + W + 160);
+    if (!list.length) return;
+    const w = W * scale, h = this.e.H * scale;
+    if (!this.fx || this.fx.width !== w || this.fx.height !== h) { this.fx = makeCanvas(w, h); this.fxMask = makeCanvas(w, h); }
+    const mg = this.fxMask.getContext('2d');
+    mg.setTransform(1, 0, 0, 1, 0, 0);
+    mg.globalAlpha = 1;
+    mg.clearRect(0, 0, w, h);
+    mg.imageSmoothingEnabled = false;
+    const t = f.time;
+    for (const tr of list) {
+      const a = this.art(tr);
+      const bx = tr.x - c.x, by = groundY(tr.x) - c.y + 2;
+      mg.setTransform(scale, 0, 0, scale, 0, 0);
+      if (tr.state === 'falling') {
+        const fl = tr.fall, dir = tr.fallDir;
+        mg.globalAlpha = fl.alpha;
+        // sink a touch into the grass while dissolving
+        mg.translate(bx, by - 3 + (1 - fl.alpha) * 4);
+        mg.rotate(fl.a * dir);
+        mg.drawImage(a.trunk, -a.ax, -a.ay + 3);
+        // the crown bends around its middle: lags while falling, whips on impact
+        const py = -a.ay * 0.55;
+        mg.translate(0, py); mg.rotate(Math.max(-0.06, Math.min(0.06, fl.flex)) * dir); mg.translate(0, -py);
+        for (const p of a.pieces) mg.drawImage(p.c, -a.ax, -a.ay + 3);
+      } else {
+        const v = Math.min(1, (tr.growT - GROW.sprout) / GROW.rise);
+        // eased in, then one soft overshoot; the crown fills out a beat after the trunk stretches up
+        const sy = 0.08 + 0.92 * spring(v ** 1.5, 4.5, 5);
+        const sx = (0.2 + 0.8 * spring(v ** 1.8, 4, 6)) * (1 + 0.05 * Math.sin(v * 12) * (1 - v));
+        mg.globalAlpha = Math.min(1, v * 6);
+        mg.translate(bx, by);
+        mg.scale(sx, sy);
+        mg.drawImage(a.trunk, -a.ax, -a.ay);
+        for (let i = 0; i < a.pieces.length; i++) {
+          const p = a.pieces[i];
+          const sway = Math.sin(t * (0.9 + i * 0.17) + p.phase) * p.amp * this.wind;
+          mg.drawImage(p.c, -a.ax + sway, -a.ay);
+        }
+      }
+    }
+    mg.setTransform(1, 0, 0, 1, 0, 0);
+    mg.globalAlpha = 1;
+    this.gradeLayer(this.fx.getContext('2d'), this.fxMask, w, h, f.day.cur);
+    dg.drawImage(this.fx, 0, 0);
   }
 
   frontTufts(g, f, camX, camY, t) {
@@ -395,7 +479,7 @@ export class Renderer {
     const gTop = (canopy.H - 14 + Math.round((f.camY0 - camY) * 0.6) - 50) * 2;
     const ground = (groundY(camX + this.e.W / 2) - camY) * 2;
     const slant = d.slant;
-    const rayA = d.rays * (q === 'low' ? 0.5 : 1) * (f.rayBoost || 1);
+    const rayA = d.rays * (q === 'low' ? 0.5 : 1) * (f.rayBoost || 1) * (REGION.look.rays || 1);
     for (let rep = Math.round(ox) - STRIP_W; rep < this.e.W + STRIP_W; rep += STRIP_W) {
       for (let i = 0; i < canopy.gaps.length; i++) {
         const gx = (rep + canopy.gaps[i]) * 2;
@@ -435,22 +519,29 @@ export class Renderer {
     const lampA = 0.25 + night * 0.75;
     const glowAt = (spr, x, y, s, a) => { lg.globalAlpha = a; lg.drawImage(spr, (x - camX) * 2 - s, (y - camY) * 2 - s, s * 2, s * 2); };
     for (const lx of this.lanterns) if (lx > camX - 60 && lx < camX + this.e.W + 60) glowAt(G.warm, lx - 2, groundY(lx) - 27, 46, lampA * 0.7);
-    const st = this.station;
-    glowAt(G.warm, st.trader.x - 44, groundY(st.trader.x - 44) - 6, 80 + Math.sin(t * 9) * 4, 0.45 + night * 0.5);
-    // altar and elder runes pulse in cyan
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
-    for (const r of this.props.altar.runes) glowAt(G.cyan, st.altar.x + r.x, groundY(st.altar.x) + r.y, 14, 0.3 + pulse * 0.3);
-    glowAt(G.cyan, st.altar.x, groundY(st.altar.x) + this.props.altar.focus.y + 4, 40, 0.25 + pulse * 0.2);
     const elderBoost = f.elderGlow || 0;
-    for (const r of this.props.elder.runes) glowAt(G.cyan, st.elder.x + r.x, groundY(st.elder.x) + r.y, 18 + elderBoost * 20, (0.25 + pulse * 0.25) * (1 + elderBoost * 2));
-    glowAt(G.green, st.elder.x, groundY(st.elder.x) - 16, 50 + elderBoost * 60, 0.15 + elderBoost * 0.5);
-    glowAt(G.gold, st.gate.x, groundY(st.gate.x) - 50, 70, 0.35 + (1 - night) * 0.2);
+    for (const st of STATIONS) {
+      if (st.x < camX - 160 || st.x > camX + this.e.W + 160) continue;
+      const gy = groundY(st.x);
+      if (st.kind === 'trader') glowAt(G.warm, st.x - 44, groundY(st.x - 44) - 6, 80 + Math.sin(t * 9) * 4, 0.45 + night * 0.5);
+      else if (st.kind === 'altar') {
+        // altar runes pulse in cyan
+        for (const r of this.props.altar.runes) glowAt(G.cyan, st.x + r.x, gy + r.y, 14, 0.3 + pulse * 0.3);
+        glowAt(G.cyan, st.x, gy + this.props.altar.focus.y + 4, 40, 0.25 + pulse * 0.2);
+      } else if (st.kind === 'elder') {
+        for (const r of this.props.elder.runes) glowAt(G.cyan, st.x + r.x, gy + r.y, 18 + elderBoost * 20, (0.25 + pulse * 0.25) * (1 + elderBoost * 2));
+        glowAt(G.green, st.x, gy - 16, 50 + elderBoost * 60, 0.15 + elderBoost * 0.5);
+      } else if (st.kind === 'gate') glowAt(G.gold, st.x, gy - 50, f.gateOpen ? 110 : 70, (f.gateOpen ? 0.6 : 0.35) + (1 - night) * 0.2);
+      else if (st.kind === 'sundial') glowAt(G.gold, st.x, gy - 30, 40 + pulse * 12, 0.45 + pulse * 0.2);
+    }
     // mossheart cores, burning trees
     for (const tr of f.trees.list) {
       if (tr.state !== 'alive' || tr.x < camX - 60 || tr.x > camX + this.e.W + 60) continue;
       const a = this.art(tr);
       const top = groundY(tr.x) - a.ay;
-      if (a.glow) glowAt(G.green, tr.x + a.glow.x - a.ax, top + a.glow.y, 30 + pulse * 10, 0.5);
+      if (a.glow) glowAt(G[a.glow.col] || G.green, tr.x + a.glow.x - a.ax, top + a.glow.y, 30 + pulse * 10, 0.5);
+      if (a.drips?.length) for (const dr of a.drips) glowAt(G.gold, tr.x + dr.x - a.ax, top + dr.y, 8, 0.35 + pulse * 0.25);
       if (tr.burn) glowAt(G.warm, tr.x, groundY(tr.x) - 16, 36 + Math.sin(t * 13) * 5, 0.6);
     }
     // ground mist

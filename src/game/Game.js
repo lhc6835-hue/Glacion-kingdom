@@ -10,7 +10,9 @@ import { Economy } from './Economy.js';
 import { Gacha } from './Gacha.js';
 import { Processing } from './Processing.js';
 import { Player } from './Player.js';
-import { WORLD, STATIONS, TREE_SPOTS, groundY } from './World.js';
+import { WORLD, STATIONS, TREE_SPOTS, REGION, LORE, groundY, setRegion } from './World.js';
+import { REGIONS } from '../data/regions.js';
+import { pay, canAfford } from './GameState.js';
 import { Renderer } from '../gfx/Renderer.js';
 import { Particles } from '../gfx/Particles.js';
 import { Ambient } from '../gfx/Ambient.js';
@@ -45,8 +47,12 @@ export class Game {
     this.rng = Math.random;
     this.now = 0;
     this.day = new DayCycle(opts.hour ?? this.state.hour);
+    // resume in the region the save was made in, if it is still open to the player
+    const reg = this.state.region;
+    setRegion(REGIONS[opts.region] ? opts.region : REGIONS[reg] && (reg === 'evergreen' || this.state.unlocks[reg]) ? reg : 'evergreen');
+    this.state.region = REGION.id;
     this.trees = new TreeField(this.events, this.rng);
-    TREE_SPOTS.forEach(([sp, x], i) => this.trees.spawn(sp, x, { seed: 1000 + i * 77 }));
+    this.plantTrees();
     this.combat = new Combat({ state: this.state, trees: this.trees, events: this.events, rng: this.rng, isDay: () => this.day.isDay });
     this.economy = new Economy(this.state, this.events);
     this.gacha = new Gacha(this.state, this.economy, this.events, this.rng);
@@ -71,6 +77,8 @@ export class Game {
     this.cam.x = this.player.x - this.engine.W / 2;
     this.cam.y = this.camY0;
     this.applySettings();
+    this.audio.setMood(REGION.look.music);
+    this.loreIdx = {};
     this.wireEvents();
     this.offline = this.processing.applyOffline(this.state.savedAt, Date.now());
     this.mode = 'boot';
@@ -78,9 +86,84 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
   }
 
+  plantTrees() {
+    this.trees.list = [];
+    TREE_SPOTS.forEach(([sp, x], i) => this.trees.spawn(sp, x, { seed: 1000 + REGION.order * 5000 + i * 77 }));
+  }
+
+  canUnlock(id) {
+    const u = REGIONS[id]?.unlock;
+    if (!u || this.state.unlocks[id]) return false;
+    return u.requires.every((r) => (this.state.stats.felled[r.felled] || 0) >= r.n) && canAfford(this.state, u.cost);
+  }
+
+  unlockRegion(id) {
+    if (!this.canUnlock(id)) return false;
+    pay(this.state, REGIONS[id].unlock.cost);
+    this.state.unlocks[id] = true;
+    this.state.codex.lore.gate = true;
+    this.audio.play('unlock');
+    this.trauma = Math.min(1, this.trauma + 0.6 * this.state.settings.shake);
+    const gx = STATIONS.find((s) => s.kind === 'gate')?.x ?? this.player.x;
+    this.particles.burst(40, gx, groundY(gx) - 10, ['#7a6a52', '#5a4a3a', '#9a8a6a'], 90, 3, -Math.PI / 2, 1.2, { grav: 60, drag: 2, size: 2, kind: 2 });
+    this.renderer.flash(gx, groundY(gx) - 40, 140, 'gold', 0.6);
+    this.ui.toast('바위가 굴러 내려가고 <b>해비침 숲</b>으로 가는 길이 열렸다!', 'big');
+    this.save();
+    return true;
+  }
+
+  // Walk through to another region: fade out, swap the world, fade back in with a title card.
+  travel(to) {
+    if (this.traveling || !REGIONS[to]) return;
+    this.traveling = true;
+    const from = REGION.id;
+    this.combat.disengage();
+    this.player.locked = true;
+    this.player.vx = 0;
+    this.audio.play('travel');
+    this.ui.veil(true);
+    setTimeout(() => {
+      setRegion(to);
+      this.state.region = to;
+      this.renderer.setRegion();
+      this.plantTrees();
+      this.ambient = new Ambient();
+      for (const p of this.particles.pool) p.alive = false;
+      this.player.x = REGION.entryX[from] ?? REGION.spawnX;
+      this.player.y = groundY(this.player.x);
+      this.player.facing = this.player.x < REGION.width / 2 ? 1 : -1;
+      this.layoutCam();
+      this.cam.x = Math.max(0, Math.min(WORLD.width - this.engine.W, this.player.x - this.engine.W / 2 + this.player.facing * 18));
+      this.cam.y = this.camY0;
+      this.audio.setMood(REGION.look.music);
+      const first = !this.state.unlocks['seen_' + to];
+      this.state.unlocks['seen_' + to] = true;
+      this.state.codex.lore.gate = this.state.codex.lore.gate || to === 'sunveil';
+      this.save();
+      setTimeout(() => {
+        this.ui.veil(false);
+        this.ui.discover(REGION, first);
+        this.audio.play(first ? 'discover' : 'chime');
+        this.player.locked = false;
+        this.traveling = false;
+      }, 250);
+    }, 650);
+  }
+
+  // Look at a landmark: records it in the codex and shows its next line of lore.
+  inspect(st) {
+    const lines = LORE[st.id];
+    this.state.codex.lore[st.id] = true;
+    this.audio.play('chime');
+    if (st.kind === 'elder') this.elderPulse = 1.5;
+    if (!lines) return;
+    const i = this.loreIdx[st.id] = ((this.loreIdx[st.id] ?? -1) + 1) % lines.length;
+    this.ui.toast(`<b>${st.ko}</b> — ${lines[i]}`);
+  }
+
   layoutCam() { this.camY0 = groundY(WORLD.spawnX) + 46 - this.engine.H; }
 
-  stationX(id) { return STATIONS.find((s) => s.id === id).x; }
+  stationX(id) { return STATIONS.find((s) => s.id === id || s.kind === id).x; }
 
   applySettings() {
     const s = this.state.settings;
@@ -146,8 +229,25 @@ export class Game {
     if (!s.sawmill.level) return `<b>물레방아 제재소</b>를 수리하면 원목을 비싼 판재로 가공할 수 있습니다 (${SAWMILL_LEVELS[1].cost.gold} 골드)`;
     if (s.classes.owned.length < 2 && !this.flags.sawGuild) return '<b>길드 게시판</b>에서 클래스 목표를 확인하세요';
     if (s.classes.owned.length < 2) return '첫 클래스 구매를 목표로 하세요 — 정밀 감시자는 크리티컬 30회가 필요합니다';
+    if (REGION.id === 'sunveil') {
+      if (!s.stats.felled.oak) return '해비침 숲의 <b>참나무</b>를 베어 보세요. 계곡 나무보다 단단하지만 값이 훨씬 좋아요';
+      if (!s.stats.felled.honeybark) return '숲 가운데 해시계 너머 <b>꿀껍질나무</b>에서 금빛 수지가 나옵니다';
+      if (!s.stats.felled.sunheart) return '참나무가 다시 자랄 때 가끔 <b>태양심장 참나무</b>가 됩니다. 숲 동쪽 끝을 확인하세요';
+      return '';
+    }
+    if (!s.unlocks.sunveil && (s.stats.felled.silverleaf || 0) >= 1 && s.stats.goldEarned > 800) {
+      const need = REGIONS.sunveil.unlock;
+      return `계곡 동쪽 끝 <b>무너진 바위 길</b>을 치우면 새 지역이 열립니다 — 은엽수 ${Math.min(3, s.stats.felled.silverleaf || 0)}/3 · ${need.cost.gold} 골드 · 정수 ${need.cost.essence}`;
+    }
+    if (s.unlocks.sunveil && !s.unlocks.seen_sunveil) return '바위 길이 열렸습니다. 동쪽 끝으로 가서 <b>해비침 숲</b>으로 들어가세요';
     if (!s.stats.felled.mossheart) return '계곡 동쪽 끝의 <b>이끼심장 소나무</b>(방어 10)에 도전하세요';
     return '';
+  }
+
+  leafColors(t) {
+    const k = TREES[t.species].art.kind;
+    const pal = { pine: PAL.pine, birch: PAL.birch, silver: PAL.silver, mossheart: PAL.moss, oak: PAL.oak, sunheart: PAL.sunheart, maple: PAL.maple, honey: PAL.honeyLeaf, dawn: PAL.dawn }[k] || PAL.leafDeep;
+    return [pal[2], pal[3], pal[4]];
   }
 
   isTouch() { return document.body.classList.contains('touch-mode'); }
@@ -176,7 +276,10 @@ export class Game {
     if (this.combat.target) return '';
     const st = this.nearStation();
     const touch = this.isTouch();
-    if (st) return `${touch ? '<b>E</b>' : '<kbd>E</kbd>'} ${st.ko} — ${st.verb}`;
+    if (st) {
+      const verb = st.kind === 'gate' && this.state.unlocks[st.to] ? `${REGIONS[st.to].ko}으로 가기` : st.verb;
+      return `${touch ? '<b>E</b>' : '<kbd>E</kbd>'} ${st.ko} — ${verb}`;
+    }
     const t = this.nearTree();
     if (t) return touch ? `<b>도끼</b> ${TREES[t.species].ko} 벌목 시작` : `<kbd>클릭</kbd>/<kbd>J</kbd> ${TREES[t.species].ko} 벌목 시작`;
     return '';
@@ -248,13 +351,12 @@ export class Game {
     ev.on('fell', ({ tree, rewards }) => {
       tree.fallDir = this.player.x < tree.x ? 1 : -1;
       A.play('creak', { pan: panOf(tree.x) });
-      this.pendingFalls.push({ tree, at: this.now + this.trees.fallTime(tree), rewards });
       const rare = TREES[tree.species].rarity >= 3;
       const parts = rewards.map((r) => `${ico(r.id)} ${r.id === 'gold' || r.id === 'essence' ? '' : ITEMS[r.id].ko + ' '}+${r.n}`).join('  ');
       this.ui.toast(`<b>${TREES[tree.species].ko}</b> 쓰러뜨림 — ${parts}`, rare ? 'big' : '');
       if (rare) { A.play('rare'); this.player.cheerT = 1.4; }
     });
-    ev.on('rareSpawn', ({ tree }) => { this.ui.toast(`계곡 어딘가에 <b>${TREES[tree.species].ko}</b>가 자라났다!`, 'big'); A.play('chime'); });
+    ev.on('rareSpawn', ({ tree }) => { this.ui.toast(`${WORLD.ko} 어딘가에 <b>${TREES[tree.species].ko}</b>가 자라났다!`, 'big'); A.play('chime'); });
     ev.on('produced', ({ id, n }) => this.ui.toast(`${ico(id)} ${ITEMS[id].ko} +${n} <small>제재소</small>`));
     ev.on('step', ({ run, x, y }) => { A.play('step', { run }); if (run) P.burst(2, x, y - 1, ['#8a7a62', '#6a5a48'], 14, 1.2, -Math.PI / 2 - this.player.facing * 0.6, 0.35, { grav: -10, drag: 3, kind: 2, size: 2 }); });
     ev.on('jump', () => A.play('jump'));
@@ -266,7 +368,47 @@ export class Game {
       P.burst(18, p.x, p.y - 10, col, 60, 6.28, 0, 0.6, { drag: 3, glow: 0.8 });
       R.flash(p.x, p.y - 10, 50, id === 'ignite' ? 'warm' : 'cyan', 0.3);
     });
-    this.pendingFalls = [];
+    // felling and regrowth beats come from the tree simulation (Trees.stepFall)
+    ev.on('treeLanded', ({ tree: t, impact, first }) => {
+      const art = R.art(t);
+      const lx = t.x + t.fallDir * art.H * 0.55;
+      const size = Math.min(2, art.H / 80) * (first ? 1 : 0.35);
+      A.play('fell', { size, pan: panOf(lx) });
+      this.trauma = Math.min(1, this.trauma + 0.3 * size * this.state.settings.shake);
+      const n = Math.round(22 * size);
+      // dust rolls out along the length of the trunk, leaves jump from the crown
+      for (let k = 0; k < 4; k++) {
+        const x = t.x + t.fallDir * art.H * (0.25 + k * 0.22);
+        P.burst(Math.ceil(n / 4), x, groundY(x) - 1, ['#7a6a52', '#5a4a3a', '#9a8a6a'], 50 + impact * 6, 1.4, -Math.PI / 2 - t.fallDir * 0.3, 0.9, { grav: 30, drag: 2.2, size: 2, kind: 2 });
+      }
+      if (first) {
+        P.burst(Math.round(26 * size), lx, groundY(lx) - 12, [art.logColor, ...this.leafColors(t)], 55, 3, -Math.PI / 2, 2.6, { grav: 18, drag: 0.8, kind: 1, size: 2, spin: 4 });
+        R.flash(lx, groundY(lx) - 6, 60 * size, 'warm', 0.12);
+        // rewards fly to the player as glints
+        for (let k = 0; k < 6; k++) P.spawn(lx + (Math.random() - 0.5) * 20, groundY(lx) - 6, (this.player.x - lx) * 1.6, -40 - Math.random() * 30, 0.6, '#ffe8a0', { glow: 0.8, grav: 120 });
+        this.player.gatherT = 0.3;
+        A.play('pickup');
+      }
+    });
+    ev.on('treeDissolve', ({ tree: t }) => {
+      const art = R.art(t);
+      // the lying trunk breaks into drifting leaves and motes as it fades
+      for (let k = 0; k < 6; k++) {
+        const x = t.x + t.fallDir * art.H * (0.15 + k * 0.15);
+        P.burst(3, x, groundY(x) - 4 - (k > 3 ? 6 : 0), this.leafColors(t), 14, 6.28, 0, 1.6, { grav: -6, drag: 1.2, kind: 1, size: 2, spin: 3 });
+        P.spawn(x, groundY(x) - 4, 0, -10 - Math.random() * 8, 1.2, '#ffe8b0', { glow: 0.6, drag: 1 });
+      }
+    });
+    ev.on('treeSprouted', ({ tree: t }) => {
+      A.play('sprout', { pan: panOf(t.x) });
+      P.burst(8, t.x, groundY(t.x), ['#8ad06a', '#d0f59a', '#5a8a5a'], 26, 1.6, -Math.PI / 2, 0.8, { grav: 50, drag: 2, size: 1, glow: 0.3 });
+    });
+    ev.on('treeSprung', ({ tree: t }) => {
+      const art = R.art(t);
+      const top = groundY(t.x) - art.ay + art.H * 0.3;
+      P.burst(12, t.x, top, this.leafColors(t), 30, 6.28, 0, 1.4, { grav: 14, drag: 1, kind: 1, size: 2, spin: 3 });
+      for (let k = 0; k < 8; k++) P.spawn(t.x + (Math.random() - 0.5) * art.W * 0.6, top + Math.random() * art.H * 0.4, 0, -6 - Math.random() * 6, 1.4, '#e8ffd0', { glow: 0.7, drag: 1 });
+    });
     const ico = (id) => `<img class="ico" src="${itemIcon(id)}" alt="">`;
   }
 
@@ -284,22 +426,6 @@ export class Game {
     this.combat.update(dt, this.now, worldDt);
     this.trees.update(worldDt, this.now, (t) => this.combat.onFell(t, this.now));
     this.processing.tick(dt);
-    for (let i = this.pendingFalls.length - 1; i >= 0; i--) {
-      const f = this.pendingFalls[i];
-      if (this.now < f.at) continue;
-      this.pendingFalls.splice(i, 1);
-      const t = f.tree, art = this.renderer.art(t);
-      const lx = t.x + t.fallDir * art.H * 0.55;
-      const size = Math.min(2, art.H / 80);
-      this.audio.play('fell', { size, pan: 0 });
-      this.trauma = Math.min(1, this.trauma + 0.35 * size * this.state.settings.shake);
-      this.particles.burst(26 * size, lx, groundY(lx) - 2, ['#7a6a52', '#5a4a3a', '#9a8a6a'], 60, 1.6, -Math.PI / 2, 0.9, { grav: 40, drag: 2, size: 2, kind: 2 });
-      this.particles.burst(24 * size, lx, groundY(lx) - 16, [art.logColor, '#3a6e4a', '#5a8a5a', '#2a5040'], 50, 3, -Math.PI / 2, 2.5, { grav: 20, drag: 0.8, kind: 1, size: 2 });
-      // rewards fly to the player as glints
-      for (let k = 0; k < 6; k++) this.particles.spawn(lx + (Math.random() - 0.5) * 20, groundY(lx) - 6, (this.player.x - lx) * 1.6, -40 - Math.random() * 30, 0.6, '#ffe8a0', { glow: 0.8, grav: 120 });
-      this.player.gatherT = 0.3;
-      this.audio.play('pickup');
-    }
     this.particles.update(worldDt);
     this.ambient.update(worldDt, this.now, this.player, this.day, this.events);
     this.followCam(dt);
@@ -335,14 +461,14 @@ export class Game {
     if (inp.hit('q')) this.useSkill();
     if (inp.hit('e')) {
       const st = this.nearStation();
-      if (st) {
+      if (st && !this.traveling) {
         this.combat.disengage();
-        if (st.id === 'elder' || st.id === 'gate') {
-          this.state.codex.lore[st.id] = true;
-          this.ui.toast(`<b>${st.ko}</b> — 도감의 세계 기록에 남았습니다`);
-          this.audio.play('chime');
-          if (st.id === 'elder') { this.elderPulse = 1.5; }
-        } else this.ui.open(st.id);
+        if (st.kind === 'gate') {
+          if (this.state.unlocks[st.to]) this.travel(st.to);
+          else { this.inspect(st); this.ui.open('gate'); }
+        } else if (st.kind === 'path' && st.to) this.travel(st.to);
+        else if (st.kind === 'elder' || st.kind === 'path' || st.kind === 'sundial') this.inspect(st);
+        else this.ui.open(st.kind);
       }
     }
     const click = inp.takeClick() || inp.hit('j');
@@ -382,7 +508,7 @@ export class Game {
       time: e.time, dt, now: this.now, cam: this.cam, camY0: this.camY0, day: this.day,
       player: this.player, combat: this.combat, trees: this.trees, particles: this.particles, ambient: this.ambient,
       equipped: this.state.equipped, sawmillLevel: this.state.sawmill.level, millBusy: this.state.sawmill.jobs.length > 0,
-      rayBoost: this.rayBoost, elderGlow: this.elderGlow, reduceFlash: this.state.settings.reduceFlash,
+      rayBoost: this.rayBoost, elderGlow: this.elderGlow, gateOpen: !!this.state.unlocks.sunveil, reduceFlash: this.state.settings.reduceFlash,
     };
     this.renderer.draw(f);
     const camX = Math.round(this.cam.x + this.cam.shakeX), camY = Math.round(this.cam.y + this.cam.shakeY);

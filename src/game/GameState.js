@@ -28,6 +28,8 @@ export function createState() {
     stats: { hits: 0, crits: 0, misses: 0, bestCombo: 0, felled: {}, goldEarned: 0, playTime: 0 },
     codex: { axes: { worn_hatchet: true }, trees: {}, items: {}, lore: {} },
     settings: defaultSettings(),
+    region: 'evergreen',
+    unlocks: {},
     hour: DAY.startHour,
     tutorial: 0,
     savedAt: 0,
@@ -46,6 +48,8 @@ export function migrate(raw) {
   if (!s.axes[s.equipped]) s.equipped = 'worn_hatchet';
   if (!s.classes.owned.includes('lumberjack')) s.classes.owned = ['lumberjack', ...s.classes.owned];
   if (!s.classes.owned.includes(s.classes.active)) s.classes.active = 'lumberjack';
+  s.unlocks = { ...(raw.unlocks || {}) };
+  if (typeof s.region !== 'string') s.region = 'evergreen';
   for (const c of CURRENCIES) s[c] = Math.max(0, Math.floor(Number(s[c]) || 0));
   s.version = SAVE_VERSION;
   return s;

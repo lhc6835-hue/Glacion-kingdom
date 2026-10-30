@@ -3,7 +3,8 @@
 import { PixBuf } from '../gfx/PixBuf.js';
 import { hash2, fbm1 } from '../core/Rng.js';
 import { PAL } from './palette.js';
-import { WORLD, groundY, CREEK } from '../game/World.js';
+import { WORLD, REGION, groundY, CREEK } from '../game/World.js';
+import { warmify } from './background.js';
 
 export const GROUND_TOP = 150; // world y of the strip's first row
 
@@ -53,8 +54,9 @@ export function buildGround() {
       for (let k = 1; k <= h; k++) b.set(x, s - k, k === h ? G[5] : G[4]);
     }
     // tiny cool-toned flowers
-    if (hash2(x, 3, 13) < 0.025) {
-      const col = hash2(x, 4, 14) < 0.5 ? '#bfe0f0' : '#f0f0e0';
+    if (hash2(x, 3, 13) < (REGION.look.flowers ?? 0.025)) {
+      const h = hash2(x, 4, 14);
+      const col = REGION.look.warm ? (h < 0.4 ? '#ffe070' : h < 0.7 ? '#fff4e0' : '#f8a0b0') : h < 0.5 ? '#bfe0f0' : '#f0f0e0';
       b.set(x, s - 3, col); b.set(x, s - 2, G[3]);
     }
   }
@@ -77,7 +79,9 @@ export function buildGround() {
       x += dir; if (hash2(i, k, 23) < 0.3) y += 1;
     }
   }
-  return { c: b.toCanvas(), top: GROUND_TOP };
+  const out = { c: b.toCanvas(), top: GROUND_TOP };
+  if (REGION.look.warm) warmify(out, 0.75);
+  return out;
 }
 
 // Grass tufts drawn live in front of the player so they sway and part as you walk.

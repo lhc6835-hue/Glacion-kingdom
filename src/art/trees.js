@@ -160,6 +160,32 @@ export function buildTree(species, seed) {
     branch(trunk, ax - 1, Math.round(H * 0.5), -1, -0.5, 7 + W * 0.1, PAL.silverBark);
     branch(trunk, ax + 1, Math.round(H * 0.46), 1, -0.55, 7 + W * 0.1, PAL.silverBark);
     crown(6 + Math.floor(sh.crown * 3), ax + lean, crownY, W * 0.34, H * 0.2, W * 0.27, 0.3);
+  } else if (a.kind === 'oak' || a.kind === 'sunheart') {
+    // broad, low, spreading crown on a thick short trunk
+    pal = a.kind === 'sunheart' ? PAL.sunheart : PAL.oak;
+    const crownY = H * (0.34 + (1 - sh.k) * 0.05);
+    paintTrunk(trunk, ax, ay, Math.round(crownY + 2), tw, Math.max(3, tw * 0.6), PAL.oakBark, seed, { moss: 6 + sh.k * 10, lean });
+    branch(trunk, ax - 1, Math.round(H * 0.5), -1, -0.45, 10 + W * 0.12, PAL.oakBark);
+    branch(trunk, ax + 1, Math.round(H * 0.47), 1, -0.4, 10 + W * 0.12, PAL.oakBark);
+    crown(7 + Math.floor(sh.crown * 3), ax + lean * 0.5, crownY, W * 0.36, H * 0.16, W * 0.22, 0.26);
+  } else if (a.kind === 'maple') {
+    pal = PAL.maple;
+    const crownY = H * (0.32 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY), tw, Math.max(2, tw * 0.5), PAL.oakBark, seed, { lean });
+    branch(trunk, ax, Math.round(H * 0.46), -0.9, -0.7, 8 + W * 0.08, PAL.oakBark);
+    branch(trunk, ax, Math.round(H * 0.42), 0.9, -0.75, 8 + W * 0.08, PAL.oakBark);
+    crown(6 + Math.floor(sh.crown * 3), ax + lean, crownY, W * 0.32, H * 0.2, W * 0.24, 0.38); // jagged, leafy edge
+  } else if (a.kind === 'honey') {
+    pal = PAL.honeyLeaf;
+    const crownY = H * (0.3 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY), tw, Math.max(2, tw * 0.55), PAL.honeyBark, seed, { moss: 4, lean });
+    crown(5 + Math.floor(sh.crown * 3), ax + lean, crownY, W * 0.3, H * 0.18, W * 0.26, 0.24);
+  } else if (a.kind === 'dawn') {
+    pal = PAL.dawn;
+    const crownY = H * (0.28 + (1 - sh.k) * 0.06);
+    paintTrunk(trunk, ax, ay, Math.round(crownY), tw, Math.max(2, tw * 0.45), PAL.dawnBark, seed, { birch: false, lean: lean + 2 });
+    branch(trunk, ax + 1, Math.round(H * 0.44), 1, -0.6, 9 + W * 0.1, PAL.dawnBark);
+    crown(6 + Math.floor(sh.crown * 3), ax + lean + 3, crownY, W * 0.3, H * 0.2, W * 0.25, 0.3);
   } else {
     pal = PAL.leafDeep;
     const crownY = H * (0.34 + (1 - sh.k) * 0.06);
@@ -169,15 +195,19 @@ export function buildTree(species, seed) {
   const pieces = paintCanopy(W, H, clusters, pal, seed, { softEdge: a.kind === 'silver' }).map((c, i) => ({ c, amp: 0.4 + i * 0.35 + sh.k * 0.3, phase: rnd() * TAU }));
   // sparkle pixels on silverleaf, pulsing glow spots on mossheart (drawn by the renderer)
   const sparkles = [];
+  if (a.kind === 'maple' || a.kind === 'sunheart') for (let i = 0; i < 10; i++) sparkles.push({ x: Math.round(ax + (rnd() - 0.5) * W * 0.8), y: Math.round(H * (0.12 + rnd() * 0.35)), p: rnd() * TAU });
+  // honey drips: glowing beads down the trunk
+  const drips = [];
+  if (a.kind === 'honey') for (let i = 0; i < 5; i++) { const y = Math.round(ay - H * (0.1 + rnd() * 0.45)), x = Math.round(ax + (rnd() - 0.5) * tw); drips.push({ x, y }); trunk.set(x, y, '#ffcc40'); trunk.set(x, y + 1, '#f0a020'); }
   if (a.kind === 'silver') for (let i = 0; i < 14; i++) sparkles.push({ x: Math.round(ax + (rnd() - 0.5) * W * 0.8), y: Math.round(H * (0.12 + rnd() * 0.4)), p: rnd() * TAU });
-  const glow = a.kind === 'mossheart' ? { x: ax, y: Math.round(ay - H * 0.3) } : null;
-  return { W, H, ax, ay, trunk: trunk.toCanvas(), pieces, sparkles, glow, stump: buildStump(tw, a.kind, seed), logColor: pal[3] };
+  const glow = a.kind === 'mossheart' ? { x: ax, y: Math.round(ay - H * 0.3), col: 'green' } : a.kind === 'sunheart' ? { x: ax, y: Math.round(ay - H * 0.32), col: 'gold' } : null;
+  return { W, H, ax, ay, trunk: trunk.toCanvas(), pieces, sparkles, glow, drips, stump: buildStump(tw, a.kind, seed), logColor: pal[3] };
 }
 
 function buildStump(w, kind, seed) {
   const W = Math.round(w) + 10, H = 9;
   const b = new PixBuf(W, H);
-  const pal = kind === 'birch' ? PAL.birchBark : kind === 'silver' ? PAL.silverBark : PAL.bark;
+  const pal = kind === 'birch' ? PAL.birchBark : kind === 'silver' ? PAL.silverBark : kind === 'honey' ? PAL.honeyBark : kind === 'dawn' ? PAL.dawnBark : (kind === 'oak' || kind === 'sunheart' || kind === 'maple') ? PAL.oakBark : PAL.bark;
   paintTrunk(b, W / 2, H - 2, 3, w, w * 0.9, pal, seed, { birch: kind === 'birch' });
   // cut face
   for (let x = Math.round(W / 2 - w / 2) + 1; x < W / 2 + w / 2; x++) { b.set(x, 3, '#c9a77a'); b.set(x, 2, '#e0c49a'); }

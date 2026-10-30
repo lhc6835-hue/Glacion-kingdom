@@ -17,5 +17,14 @@ export const PAL = {
   wood: ['#2a1a10', '#4a2e1a', '#6a4426', '#8c5e34', '#b07e48', '#d4a66a'],
   cloth: ['#2a1a16', '#5a2a22', '#8a3e2a', '#b85a36', '#d88a5a'],
   teal: ['#0e2a2e', '#1a4a4e', '#2a6a6a', '#4a9a90', '#8ad0c0'],
+  // Sunveil Forest
+  oak: ['#1e2410', '#34421a', '#506a22', '#7a9a2e', '#b4c84a', '#eee488'],
+  maple: ['#3a160a', '#6a2a10', '#a84a16', '#d87c26', '#f0b23a', '#fbe08a'],
+  honeyLeaf: ['#222a10', '#3c4a18', '#5c7020', '#88a42c', '#c4d44c', '#f2f09a'],
+  dawn: ['#3a1824', '#68303e', '#a24e5a', '#d27c78', '#eeae96', '#fde2c8'],
+  sunheart: ['#2a2010', '#4a3e18', '#6e6020', '#a09030', '#dcc850', '#fff4a8'],
+  oakBark: ['#1c120a', '#33221a', '#4e3626', '#6e4e34', '#90704a', '#b49468'],
+  honeyBark: ['#24140a', '#4a2a10', '#7a4a1a', '#a8702a', '#d09a40', '#f0c870'],
+  dawnBark: ['#2a2220', '#6a5a54', '#a8968c', '#d0c0b2', '#ece0d2'],
   gold: '#f2c84a', light: '#ffe8b0', glow: '#9ff0d0',
 };

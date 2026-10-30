@@ -168,6 +168,16 @@ export class Audio {
       case 'title': this.tone('sine', 98, 98, 2.2, 0.3, { attack: 0.3, verb: 0.6 }); [392, 587, 784].forEach((f, i) => this.tone('triangle', f, f, 1.6, 0.08, { t: 0.1 + i * 0.12, verb: 0.8 })); break;
       case 'swell': this.hiss(1.2, 0.1, { f0: 200, f1: 2500, attack: 1 }); this.tone('sine', 196, 196, 1.4, 0.12, { attack: 0.8, verb: 0.8 }); this.tone('sine', 293, 293, 1.4, 0.08, { attack: 0.9, verb: 0.8 }); break;
       case 'chime': this.tone('sine', 1318, 1318, 0.8, 0.06, { verb: 0.9 }); this.tone('sine', 1975, 1975, 0.6, 0.04, { t: 0.08, verb: 0.9 }); break;
+      case 'sprout': this.tone('sine', 520, 1040, 0.18, 0.06, { pan, verb: 0.5 }); this.hiss(0.12, 0.05, { f0: 2500, f1: 4000, q: 2, pan }); break;
+      case 'travel': this.hiss(1.1, 0.12, { f0: 300, f1: 1800, attack: 0.5 }); this.tone('sine', 110, 82, 1.2, 0.18, { attack: 0.3, verb: 0.6 }); break;
+      case 'discover':
+        this.tone('sine', 98, 98, 2.4, 0.25, { attack: 0.2, verb: 0.7 });
+        [587, 740, 880, 1175, 1480].forEach((f, i) => this.tone('triangle', f, f, 1.5, 0.08, { t: 0.15 + i * 0.13, verb: 0.9 }));
+        break;
+      case 'unlock':
+        this.tone('sine', 60, 35, 1.2, 0.7, {}); this.hiss(1.0, 0.35, { type: 'lowpass', f0: 1200, f1: 100 });
+        [392, 494, 587, 784].forEach((f, i) => this.tone('triangle', f, f, 1.2, 0.09, { t: 0.5 + i * 0.1, verb: 0.8 }));
+        break;
       case 'mill': this.hiss(0.25, 0.08, { f0: 2500, f1: 3200, q: 8, pan }); break;
       default: break;
     }
@@ -186,7 +196,7 @@ export class Audio {
       return g;
     };
     this.windBed = bed('lowpass', 520, 0.7, 0.16, 0.07);
-    this.creekBed = bed('bandpass', 2200, 0.6, 0.05, 0.4);
+    this.creekBed = bed('bandpass', 2200, 0.6, this.mood === 'sunveil' ? 0.015 : 0.05, 0.4);
     const birds = () => {
       if (this.night < 0.5) this.birdCall();
       setTimeout(birds, 2500 + Math.random() * 6000);
@@ -213,19 +223,33 @@ export class Audio {
 
   setNight(n) { this.night = n; }
 
+  // Region mood: the valley plays cool D dorian; Sunveil plays warm G lydian, a little quicker.
+  setMood(m) {
+    this.mood = m;
+    if (this.creekBed && this.ctx) this.creekBed.gain.setTargetAtTime(m === 'sunveil' ? 0.015 : 0.05, this.ctx.currentTime, 1);
+  }
+
   // ── generative music: cool modal pads (D dorian) with a sparse plucked melody ──
   startMusic() {
     const c = this.ctx;
-    const chords = [[146.8, 220, 261.6, 329.6], [130.8, 196, 246.9, 329.6], [116.5, 174.6, 220, 293.7], [130.8, 196, 261.6, 293.7]];
-    const scale = [293.7, 329.6, 349.2, 392, 440, 493.9, 523.3, 587.3, 659.3];
+    const MOODS = {
+      valley: {
+        chords: [[146.8, 220, 261.6, 329.6], [130.8, 196, 246.9, 329.6], [116.5, 174.6, 220, 293.7], [130.8, 196, 261.6, 293.7]],
+        scale: [293.7, 329.6, 349.2, 392, 440, 493.9, 523.3, 587.3, 659.3], beat: 60 / 68, rest: 0.45,
+      },
+      sunveil: {
+        chords: [[196, 246.9, 293.7, 370], [220, 277.2, 329.6, 440], [164.8, 246.9, 293.7, 392], [146.8, 220, 277.2, 370]],
+        scale: [392, 440, 493.9, 554.4, 587.3, 659.3, 740, 784, 880], beat: 60 / 76, rest: 0.35,
+      },
+    };
     let bar = 0;
-    const beat = 60 / 68;
     const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
     lp.connect(this.music);
     const pv = c.createGain(); pv.gain.value = 0.5; lp.connect(pv).connect(this.verb);
     let next = c.currentTime + 0.5;
     const schedule = () => {
       while (next < c.currentTime + 2) {
+        const { chords, scale, beat, rest } = MOODS[this.mood] || MOODS.valley;
         const ch = chords[bar % chords.length];
         for (const f of ch) {
           const o = c.createOscillator(), g = c.createGain();
@@ -237,7 +261,7 @@ export class Audio {
         }
         // melody: a few notes per bar, rests are common
         for (let b = 0; b < 4; b++) {
-          if (Math.random() < 0.45) continue;
+          if (Math.random() < rest) continue;
           const f = scale[Math.floor(Math.random() * scale.length)];
           const t = next + b * beat + (Math.random() < 0.3 ? beat / 2 : 0);
           const o = c.createOscillator(), g = c.createGain();

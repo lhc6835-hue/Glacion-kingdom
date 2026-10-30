@@ -1,5 +1,5 @@
 // Small life in the valley: ground birds that flee, butterflies by day, fireflies at night.
-import { groundY, WORLD } from '../game/World.js';
+import { groundY, WORLD, REGION } from '../game/World.js';
 
 export class Ambient {
   constructor() {
@@ -8,10 +8,22 @@ export class Ambient {
     for (const b of this.birds) { b.home = b.x; b.y = groundY(b.x); }
     this.flies = [];
     for (let i = 0; i < 26; i++) this.flies.push({ x: 100 + Math.random() * (WORLD.width - 200), y: 0, p: Math.random() * 6.28, s: 0.5 + Math.random() });
+    const look = REGION.look;
     this.butterflies = [];
-    for (let i = 0; i < 6; i++) this.butterflies.push({ x: 300 + i * 330, y: 0, p: Math.random() * 6.28, col: i % 2 ? '#8ac8f0' : '#e8f0f8' });
+    const wings = look.warm ? ['#f8d048', '#f0a038', '#fff0c0', '#e87850'] : ['#8ac8f0', '#e8f0f8'];
+    const nb = look.butterflies ?? 6;
+    for (let i = 0; i < nb; i++) this.butterflies.push({ x: 200 + (i + Math.random() * 0.6) * (WORLD.width - 400) / nb, y: 0, p: Math.random() * 6.28, col: wings[i % wings.length], h: 10 + Math.random() * 16 });
+    // warm forests: pollen hanging in the light and leaves drifting down from the canopy
+    this.pollen = [];
+    if (look.pollen) for (let i = 0; i < 70; i++) this.pollen.push({ x: Math.random() * WORLD.width, y: 0, h: 8 + Math.random() * 90, p: Math.random() * 6.28, s: 0.4 + Math.random() * 0.8 });
+    this.leaves = [];
+    if (look.leaves) for (let i = 0; i < 26; i++) this.leaves.push(this.newLeaf(look.leaves, true));
     this.night = 0;
     this.flock = null;
+  }
+
+  newLeaf(cols, anywhere) {
+    return { x: Math.random() * WORLD.width, y: anywhere ? Math.random() * 200 : -10 - Math.random() * 40, vx: 4 + Math.random() * 8, vy: 9 + Math.random() * 8, p: Math.random() * 6.28, col: cols[Math.floor(Math.random() * cols.length)] };
   }
 
   update(dt, t, player, day, events) {
@@ -49,7 +61,14 @@ export class Ambient {
     for (const bf of this.butterflies) {
       bf.p += dt;
       bf.x += Math.sin(bf.p * 0.4) * 14 * dt;
-      bf.y = groundY(bf.x) - 12 - Math.abs(Math.sin(bf.p * 1.3)) * 14;
+      bf.y = groundY(bf.x) - (bf.h || 12) - Math.abs(Math.sin(bf.p * 1.3)) * 14;
+    }
+    for (const p of this.pollen) { p.p += dt * p.s; p.x += Math.sin(p.p * 0.5) * 3 * dt + dt * 1.5; p.y = groundY(p.x) - p.h - Math.sin(p.p) * 5; }
+    for (const l of this.leaves) {
+      l.p += dt * 3;
+      l.x += (l.vx + Math.sin(l.p) * 14) * dt;
+      l.y += (l.vy + Math.cos(l.p * 0.7) * 6) * dt;
+      if (l.y > groundY(l.x) - 1) Object.assign(l, this.newLeaf(REGION.look.leaves || ['#c0a040'], false), { x: player.x + (Math.random() - 0.3) * 600 });
     }
     // occasional flock crossing the sky
     if (!this.flock && Math.random() < dt * 0.03) this.flock = { x: -40, y: 30 + Math.random() * 40, t: 0 };
@@ -88,6 +107,15 @@ export class Ambient {
       g.fillStyle = bf.col;
       if (open) { g.fillRect(x - 2, y - 1, 2, 2); g.fillRect(x + 1, y - 1, 2, 2); } else g.fillRect(x - 1, y - 2, 3, 2);
       g.fillStyle = '#1a1a1a'; g.fillRect(x, y - 1, 1, 2);
+    }
+    for (const l of this.leaves) {
+      const x = Math.round(l.x - camX), y = Math.round(l.y - camY);
+      g.fillStyle = l.col;
+      if (Math.sin(l.p) > 0) g.fillRect(x, y, 2, 1); else g.fillRect(x, y, 1, 2);
+    }
+    if (this.pollen.length && d.night < 0.7) {
+      g.fillStyle = '#fff2b0';
+      for (const p of this.pollen) if (Math.sin(p.p * 1.7) > -0.3) g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 1);
     }
     if (this.night > 0.4) {
       for (const f of this.flies) {

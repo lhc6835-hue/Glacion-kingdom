@@ -203,7 +203,7 @@ export function elderTree() {
   return { c, ax: cx, ay: h - 2, runes, hollow: { x: 0, y: -16 } };
 }
 
-export function gate() {
+export function gate(open = false) {
   const w = 110, h = 110;
   const { c, r, p } = painter(w, h);
   const rnd = mulberry32(14);
@@ -218,9 +218,10 @@ export function gate() {
     if (y < 52 && dx * dx + dy * dy > 1) continue;
     p(x, y, y < 60 ? '#e8d8a0' : '#b8a878');
   }
-  // tumbled boulders filling the arch
+  // tumbled boulders filling the arch (pushed aside to the edges once the path is cleared)
   for (let i = 0; i < 26; i++) {
-    const bx = 50 + rnd() * 50, by = 50 + rnd() * 56, br = 4 + rnd() * 9;
+    let bx = 50 + rnd() * 50, by = 50 + rnd() * 56, br = 4 + rnd() * 9;
+    if (open) { if (i > 9) continue; bx = i % 2 ? 46 + rnd() * 8 : 96 + rnd() * 8; by = 92 + rnd() * 12; br = 3 + rnd() * 5; }
     for (let y = -br; y <= br; y++) for (let x = -br; x <= br; x++) {
       if (x * x + y * y > br * br) continue;
       p(bx + x, by + y, x + y < -br * 0.6 ? ST[5] : x + y < 0 ? ST[4] : x + y < br * 0.7 ? ST[3] : ST[1]);
@@ -272,4 +273,31 @@ export function logPile() {
     r(x, y + 1, 1, 4, W[1]); r(x + 1, y + 2, 2, 2, '#d4b07a');
   }
   return { c, ax: 13, ay: 13 };
+}
+
+// Wayfinding post with two arrow boards and hanging vines.
+export function signpost() {
+  const { c, r, p } = painter(40, 48);
+  r(18, 8, 3, 40, W[2]); r(18, 8, 1, 40, W[4]);
+  r(4, 12, 26, 8, W[3]); r(5, 13, 24, 6, W[4]); r(0, 14, 5, 4, W[3]); r(1, 15, 3, 2, W[4]);
+  r(14, 24, 24, 8, W[3]); r(15, 25, 22, 6, W[4]); r(36, 26, 4, 4, W[3]);
+  r(8, 15, 16, 1, '#3a2418'); r(18, 27, 14, 1, '#3a2418');
+  for (let y = 0; y < 14; y++) p(20 + Math.round(Math.sin(y / 2)), 6 + y, PAL.moss[3]);
+  r(16, 6, 7, 3, PAL.moss[2]);
+  r(10, 46, 20, 2, '#1a2e22');
+  return { c, ax: 19, ay: 47 };
+}
+
+// Mossy stone sundial with a brass gnomon; the light layer adds its glow.
+export function sundial() {
+  const w = 40, h = 34;
+  const { c, r, p } = painter(w, h);
+  r(12, 14, 16, 18, ST[3]); r(12, 14, 2, 18, ST[4]); r(26, 14, 2, 18, ST[1]); // pillar
+  r(8, 30, 24, 4, ST[2]); r(8, 30, 24, 1, ST[4]);
+  r(4, 8, 32, 6, ST[4]); r(4, 8, 32, 1, ST[5]); r(4, 13, 32, 1, ST[1]); // dial face
+  for (let i = 0; i < 9; i++) p(6 + i * 3.5, 10, '#3a3a2a');
+  r(19, 0, 2, 9, '#d8a840'); r(17, 6, 6, 2, '#f0c860'); p(19, 0, '#fff0b0'); // gnomon
+  for (let x = 4; x < 36; x++) if (hash2(x, 3, 9) < 0.5) p(x, 8, PAL.moss[3]);
+  for (let y = 14; y < 30; y++) if (hash2(y, 4, 9) < 0.4) p(12, y, PAL.moss[2]);
+  return { c, ax: 20, ay: h - 1, glow: { x: 0, y: -h + 4 } };
 }

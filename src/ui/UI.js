@@ -11,7 +11,8 @@ import { gradeWeights } from '../game/Gacha.js';
 import { canAfford, count, costLabel } from '../game/GameState.js';
 import { axeDamage } from '../game/AxeStats.js';
 import { itemIcon, axeIcon } from '../art/icons.js';
-import { LORE } from '../game/World.js';
+import { LORE, WORLD, STATIONS } from '../game/World.js';
+import { REGIONS } from '../data/regions.js';
 import { GachaFX } from './GachaFX.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -43,7 +44,7 @@ const SVG = {
 const icon = (k, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
 const PANEL_META = {
   trader: ['tent', 'Wandering Merchant'], altar: ['altar', 'Altar of Axes'], guild: ['guild', "Woodcutters' Guild"],
-  sawmill: ['mill', 'Waterwheel Mill'], bag: ['bag', 'Satchel'], codex: ['book', 'Field Codex'], settings: ['gear', 'Settings'],
+  sawmill: ['mill', 'Waterwheel Mill'], gate: ['leaf', 'The Fallen Stones'], bag: ['bag', 'Satchel'], codex: ['book', 'Field Codex'], settings: ['gear', 'Settings'],
 };
 
 function gradeTag(g) { const gr = GRADES[g]; return `<span class="grade" style="--gc:${gr.color}">${gr.ko}</span>`; }
@@ -72,7 +73,7 @@ export class UI {
           <div class="boot-rule"><i></i></div>
           <div class="boot-sub">그늘진 계곡의 벌목꾼</div>
           <div class="boot-hint">화면을 누르거나 아무 키나 눌러 시작</div>
-          <div class="boot-note">소리가 함께 재생돼요 · v0.1</div>
+          <div class="boot-note">소리가 함께 재생돼요 · v0.5</div>
         </div>
       </div>
       <div class="deck" aria-hidden="true"></div>
@@ -100,6 +101,8 @@ export class UI {
           <button class="tb chop" data-chop aria-label="도끼질">도끼</button>
         </div>
       </div>
+      <div id="veil" class="veil"></div>
+      <div id="discover" class="discover hidden"><small id="dEn"></small><div class="d-rule"><i></i></div><h2 id="dKo"></h2><p id="dSub"></p></div>
       <div id="panelWrap" class="panel-wrap hidden"><div class="panel" id="panel"></div></div>`;
     this.$ = (id) => root.querySelector('#' + id);
     root.addEventListener('click', (e) => {
@@ -147,6 +150,22 @@ export class UI {
     setTimeout(done, 380);
     setTimeout(() => b.classList.add('hidden'), 950);
   }
+  // full-screen fade used while walking between regions
+  veil(on) { this.$('veil').classList.toggle('on', on); }
+
+  // region title card: English kicker, Korean name, short line
+  discover(region, first) {
+    const d = this.$('discover');
+    this.$('dEn').textContent = region.en;
+    this.$('dKo').textContent = region.ko;
+    this.$('dSub').textContent = first ? '새로운 지역을 발견했습니다' : `${region.order}번째 숲`;
+    d.classList.remove('hidden', 'show');
+    void d.offsetWidth;
+    d.classList.add('show');
+    clearTimeout(this.discT);
+    this.discT = setTimeout(() => d.classList.add('hidden'), 3600);
+  }
+
   showHud(v) { this.$('hud').classList.toggle('hidden', !v); }
 
   toast(html, kind = '') {
@@ -169,7 +188,7 @@ export class UI {
     const g = this.g, s = g.state;
     const res = `<span class="cur gold" title="골드">${ico(itemIcon('gold'))}<b>${fmt(s.gold)}</b></span><span class="cur ess" title="정수">${ico(itemIcon('essence'))}<b>${fmt(s.essence)}</b></span><span class="cur shard" title="도끼 파편">${ico(itemIcon('shards'))}<b>${fmt(s.shards)}</b></span>`;
     if (res !== this.lastRes) { this.$('res').innerHTML = res; this.lastRes = res; }
-    const region = `${icon(g.day.isDay ? 'sun' : 'moon', g.day.isDay ? 'sun' : 'moon')}<div><b>상록 계곡</b><span>${g.day.cur.phase} · ${g.day.label()}</span></div>`;
+    const region = `${icon(g.day.isDay ? 'sun' : 'moon', g.day.isDay ? 'sun' : 'moon')}<div><b>${esc(WORLD.ko)}</b><span>${g.day.cur.phase} · ${g.day.label()}</span></div>`;
     if (region !== this.lastRegion) { this.$('region').innerHTML = region; this.lastRegion = region; }
     const axe = AXE_BY_ID[s.equipped], cls = CLASS_BY_ID[s.classes.active];
     const cd = g.combat.cooldownLeft(g.now);
@@ -270,7 +289,23 @@ export class UI {
           ${owned ? '<span class="owned">보유 중</span>' : `<span class="price">${ico(itemIcon('gold'))}${fmt(a.price)}</span><button class="primary" data-act="buyAxe" data-arg="${a.id}" ${s.gold >= a.price ? '' : 'disabled'}>구매</button>`}</div>`;
       }).join('') + '<div class="empty">더 강한 도끼는 도끼 제단에서만 얻을 수 있습니다.</div>';
     }
-    return this.head('떠돌이 상인 미르', '"계곡 목재는 결이 고와서 값을 잘 쳐주지."', [['sell', '판매'], ['axes', '도끼 구매']]) + `<div class="body">${body}</div>`;
+    const sunveil = WORLD.id === 'sunveil';
+    const who = STATIONS.find((st) => st.kind === 'trader')?.ko || '떠돌이 상인 미르';
+    return this.head(who, sunveil ? '"해비침 숲 나무엔 햇살이 배어 있어. 금빛 결은 값이 달라."' : '"계곡 목재는 결이 고와서 값을 잘 쳐주지."', [['sell', '판매'], ['axes', '도끼 구매']]) + `<div class="body">${body}</div>`;
+  }
+
+  p_gate() {
+    const s = this.g.state, R = REGIONS.sunveil, u = R.unlock;
+    const reqs = u.requires.map((r) => {
+      const have = s.stats.felled[r.felled] || 0;
+      return `<div class="row req ${have >= r.n ? 'done' : ''}"><span class="chk">${have >= r.n ? '✓' : ''}</span><div class="grow"><b>${esc(r.ko)}</b></div><span class="price">${Math.min(have, r.n)} / ${r.n}</span></div>`;
+    }).join('');
+    const costs = Object.entries(u.cost).map(([id, n]) => `<div class="row req ${count(s, id) >= n ? 'done' : ''}">${ico(itemIcon(id), 'big')}<div class="grow"><b>${esc(costLabel(id))}</b></div><span class="price">${fmt(Math.min(count(s, id), n))} / ${fmt(n)}</span></div>`).join('');
+    const ready = this.g.canUnlock('sunveil');
+    return this.head('무너진 바위 길', '바위 틈으로 금빛 햇살이 새어 나온다. 길을 치우면 해비침 숲으로 갈 수 있다.') + `<div class="body gate-panel">
+      <div class="gate-hero"><small>Next Region</small><b>${esc(R.ko)}</b><span>${esc(R.en)}</span><p>참나무, 금엽 단풍, 꿀껍질나무, 새벽나무가 자라는 밝은 숲. 목재 값이 훨씬 비싸고 정수가 잘 나온다.</p></div>
+      <h3>조건</h3>${reqs}<h3>비용</h3>${costs}
+      <button class="primary wide" data-act="unlockGate" ${ready ? '' : 'disabled'}>바위를 치우고 길 열기</button></div>`;
   }
 
   p_altar() {
@@ -487,6 +522,7 @@ export class UI {
       case 'cancel': ok(g.processing.cancel(+arg)); break;
       case 'equip': if (ok(g.economy.equip(arg))) g.combat.refreshMods(); break;
       case 'star': if (ok(g.economy.upgradeAxe(arg), '도끼 파편이 부족합니다')) { g.combat.refreshMods(); g.audio.play('buy'); } break;
+      case 'unlockGate': if (ok(g.unlockRegion('sunveil'), '조건이나 비용이 부족합니다')) { this.close(); } break;
       case 'saveNow': this.toast(g.save() ? '저장했습니다' : '저장하지 못했습니다 (브라우저 저장소를 쓸 수 없음)', g.lastSaveOk ? '' : 'bad'); break;
       case 'wipe':
         // two-step confirmation inside the page (browser dialogs are not always available)

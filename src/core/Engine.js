@@ -70,7 +70,8 @@ export class Engine {
   start(update) {
     let last = performance.now(), fpsT = 0, fpsN = 0;
     const loop = (t) => {
-      const dt = Math.min(0.1, (t - last) / 1000);
+      // the first rAF timestamp can predate performance.now(), so clamp at zero
+      const dt = Math.max(0, Math.min(0.1, (t - last) / 1000));
       last = t;
       fpsT += dt; fpsN++;
       if (fpsT > 0.5) { this.fps = fpsN / fpsT; fpsT = 0; fpsN = 0; }
