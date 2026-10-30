@@ -164,44 +164,7 @@ export function drawWheel(g, cx, cy, R, angle, broken) {
 }
 
 // The ancient Elder Mossroot behind the clearing. Its crown runs off the top of the screen.
-export function elderTree() {
-  const w = 170, h = 250;
-  const { c, r, p } = painter(w, h);
-  const cx = 85;
-  const runes = [];
-  for (let y = 0; y < h; y++) {
-    const t = y / h;
-    let half = 22 + Math.pow(t, 3) * 30;
-    if (y > h - 24) half += (y - (h - 24)) * 2.2;
-    for (let x = -half; x <= half; x++) {
-      const u = (x + half) / (2 * half);
-      let k = u < 0.18 ? 4 : u < 0.45 ? 3 : u < 0.78 ? 2 : 1;
-      const groove = Math.sin((x + Math.sin(y / 17) * 6) / 3.2);
-      if (groove > 0.82) k = Math.max(0, k - 2);
-      else if (groove < -0.9) k = Math.min(5, k + 1);
-      if (Math.abs(x) > half - 1) k = 0;
-      let col = PAL.bark[k];
-      if (hash2(Math.round(x / 2), Math.round(y / 2), 3) < 0.12 + (u > 0.6 ? 0.2 : 0)) col = PAL.moss[1 + (k > 2 ? 2 : 1)];
-      p(cx + x, y, col);
-    }
-  }
-  // root arches
-  for (const dir of [-1, 1]) for (let k = 0; k < 3; k++) {
-    const len = 30 + k * 14;
-    for (let i = 0; i < len; i++) {
-      const x = cx + dir * (40 + i), y = h - 4 - Math.round(Math.sin((i / len) * Math.PI) * (8 + k * 3)) + k * 0;
-      r(x, y, 1, 5 - k, PAL.bark[2]); p(x, y, PAL.bark[4]); p(x, y + 4 - k, PAL.bark[0]);
-    }
-  }
-  // glowing rune channels on the trunk
-  for (const [x, y] of [[-8, 150], [6, 120], [-4, 92], [10, 178], [-14, 200], [2, 60]]) {
-    for (let i = 0; i < 9; i++) p(cx + x + Math.round(Math.sin(i / 2) * 2), y + i, PAL.glow);
-    runes.push({ x: x, y: y + 4 - (h - 2) });
-  }
-  // a hollow between the roots
-  r(cx - 9, h - 30, 18, 26, '#0c1412'); r(cx - 7, h - 32, 14, 2, '#0c1412');
-  return { c, ax: cx, ay: h - 2, runes, hollow: { x: 0, y: -16 } };
-}
+export { elderTree } from './elder.js';
 
 export function gate(open = false) {
   const w = 110, h = 110;

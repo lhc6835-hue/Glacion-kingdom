@@ -30,7 +30,7 @@ function inCluster(c, x, y, seed) {
   return { depth: 1 - Math.abs(dx) / Math.max(1, half), nx: dx / c.w, ny: t * 1.4 - 0.7 };
 }
 
-function paintCanopy(W, H, clusters, pal, seed, opts = {}) {
+export function paintCanopy(W, H, clusters, pal, seed, opts = {}) {
   const pieces = Math.max(...clusters.map((c) => c.piece)) + 1;
   const tone = new Int8Array(W * H).fill(-1);
   const member = new Array(W * H);

@@ -221,12 +221,26 @@ export class Renderer {
     g.drawImage(art.c, Math.round(x - art.ax - camX), Math.round(groundY(x) - art.ay - camY + sink));
   }
 
+  // Mossroot: trunk, crown masses swaying by whole pixels, hanging moss, drifting spores
+  elderTree(g, e, x, camX, camY, t) {
+    const ox = Math.round(x - e.ax - camX), oy = Math.round(groundY(x) - e.ay - camY + 3);
+    g.drawImage(e.c, ox, oy);
+    for (const p of e.crown) g.drawImage(p.c, ox + Math.round(Math.sin(t * 0.7 + p.phase) * p.amp * this.wind), oy);
+    g.drawImage(e.front, ox, oy);
+    for (const sp of e.spores) {
+      const k = Math.sin(t * 1.3 + sp.p);
+      if (k < 0.2) continue;
+      g.fillStyle = k > 0.8 ? '#e0fff0' : PAL.glow;
+      g.fillRect(ox + e.ax + sp.x + Math.round(Math.sin(t * 0.5 + sp.p) * 3), oy + e.ay + sp.y - Math.round(((t * 4 + sp.p * 9) % 30)), 1, 1);
+    }
+  }
+
   backProps(g, f, camX, camY, vis, t) {
     const P = this.props;
     for (const st of STATIONS) {
-      if (!vis(st.x, 120)) continue;
+      if (!vis(st.x, 140)) continue;
       switch (st.kind) {
-        case 'elder': this.propAt(g, P.elder, st.x, camX, camY, 3); break;
+        case 'elder': this.elderTree(g, P.elder, st.x, camX, camY, t); break;
         case 'gate': this.propAt(g, f.gateOpen ? P.gateOpen : P.gate, st.x, camX, camY, 2); break;
         case 'path': this.propAt(g, P.signpost, st.x, camX, camY, 2); break;
         case 'sundial': this.propAt(g, P.sundial, st.x, camX, camY, 2); break;
@@ -532,6 +546,8 @@ export class Renderer {
       } else if (st.kind === 'elder') {
         for (const r of this.props.elder.runes) glowAt(G.cyan, st.x + r.x, gy + r.y, 18 + elderBoost * 20, (0.25 + pulse * 0.25) * (1 + elderBoost * 2));
         glowAt(G.green, st.x, gy - 16, 50 + elderBoost * 60, 0.15 + elderBoost * 0.5);
+        // a soft glow in the crown, stronger at night
+        glowAt(G.green, st.x, gy - 140, 120 + elderBoost * 40, 0.08 + night * 0.12 + elderBoost * 0.2);
       } else if (st.kind === 'gate') glowAt(G.gold, st.x, gy - 50, f.gateOpen ? 110 : 70, (f.gateOpen ? 0.6 : 0.35) + (1 - night) * 0.2);
       else if (st.kind === 'sundial') glowAt(G.gold, st.x, gy - 30, 40 + pulse * 12, 0.45 + pulse * 0.2);
     }
