@@ -15,18 +15,19 @@ import { drawSprite } from '../render/sprite.js';
 import { propSprite, drawProp, PROP_R } from '../render/arenaWorld.js';
 import {
   PlazaGround, PLAZA_R, WORLD_R, PATHS, FOUNTAIN, drawFountain, lampSprite, drawLampGlow,
-  drawGachaMachine, gallerySprite, boardSprite, faceShopSprite, benchSprite, portalSprite,
+  gallerySprite, boardSprite, faceShopSprite, benchSprite,
 } from '../render/plazaArt.js';
+import { drawMachine, drawGate } from '../render/attractions.js';
 
 const SCALE = 0.9; // ice creams on the plaza
 const FS = 0.78;   // facility sprites
 const FAC = [
   { id: 'gallery', x: 0, y: -880, h: 540, block: [130, 46], spot: [0, -820], label: '틀 갤러리 들어가기' },
-  { id: 'gflavor', x: -300, y: -390, h: 400, block: [66, 24], spot: [-300, -350], label: '맛 뽑기' },
-  { id: 'gweapon', x: 300, y: -390, h: 400, block: [66, 24], spot: [300, -350], label: '무기 뽑기' },
+  { id: 'gflavor', x: -300, y: -390, h: 520, block: [84, 22], spot: [-300, -345], label: '맛 뽑기' },
+  { id: 'gweapon', x: 300, y: -390, h: 520, block: [84, 22], spot: [300, -345], label: '무기 뽑기' },
   { id: 'board', x: -800, y: 10, h: 330, block: [110, 26], spot: [-800, 60], label: '오늘의 게시판 보기' },
   { id: 'faces', x: 800, y: 10, h: 370, block: [120, 30], spot: [800, 60], label: '표정 가게' },
-  { id: 'play', x: 0, y: 830, h: 350, block: [96, 30], spot: [0, 790], label: '플레이 존 입장' },
+  { id: 'play', x: 0, y: 850, h: 560, block: [160, 22], spot: [0, 770], label: '플레이 존 입장' },
   { id: 'bench', x: -320, y: 300, h: 120, block: [70, 16], spot: [-320, 322], label: '벤치에 앉기' },
   { id: 'bench', x: 320, y: 300, h: 120, block: [70, 16], spot: [320, 322], label: '벤치에 앉기' },
 ];
@@ -284,36 +285,14 @@ export class PlazaScene {
     g.scale(FS, FS);
     switch (f.id) {
       case 'gallery': drawSprite(g, gallerySprite()); break;
-      case 'gflavor': drawGachaMachine(g, 0, '#ff8fb4', '#ffd6e4', '맛 뽑기', this.t); break;
-      case 'gweapon': drawGachaMachine(g, 0, '#7fbfff', '#d6ecff', '무기 뽑기', this.t + 1); break;
+      case 'gflavor': drawMachine(g, 'flavor', this.t); break;
+      case 'gweapon': drawMachine(g, 'weapon', this.t + 0.5); break;
       case 'board': drawSprite(g, boardSprite()); break;
       case 'faces': drawSprite(g, faceShopSprite()); break;
       case 'bench': drawSprite(g, benchSprite()); break;
-      case 'play': this.drawPortal(g); break;
+      case 'play': g.scale(1.25, 1.25); drawGate(g, this.t); break;
     }
     g.restore();
-  }
-
-  drawPortal(g) {
-    drawSprite(g, portalSprite());
-    const cy = -170;
-    g.save();
-    g.beginPath(); g.ellipse(0, cy, 78, 112, 0, 0, TAU); g.clip();
-    const gr = g.createRadialGradient(0, cy, 4, 0, cy, 120);
-    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.3, '#ffd6f0'); gr.addColorStop(0.7, '#b8a6ff'); gr.addColorStop(1, '#7fd8ff');
-    g.fillStyle = gr; g.fillRect(-90, cy - 120, 180, 240);
-    g.strokeStyle = 'rgba(255,255,255,0.65)'; g.lineWidth = 5;
-    for (let i = 0; i < 5; i++) {
-      g.beginPath();
-      for (let k = 0; k < 40; k++) { const a = k * 0.22 + this.t * 2 + i * 1.26, r = k * 2.6; g.lineTo(Math.cos(a) * r, cy + Math.sin(a) * r * 1.4); }
-      g.stroke();
-    }
-    g.restore();
-    for (let i = 0; i < 6; i++) {
-      const a = this.t * 1.5 + i * 1.05;
-      g.fillStyle = ['#fff1a6', '#ffd6f0', '#c9f4ff'][i % 3];
-      g.beginPath(); g.arc(Math.cos(a) * 100, cy + Math.sin(a) * 130, 4, 0, TAU); g.fill();
-    }
   }
 
   drawPetals(g, x0, x1, y0, y1) {

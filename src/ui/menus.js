@@ -10,6 +10,7 @@ import { FACE, FACES } from '../../shared/faces.js';
 import { GRADES, GRADE_INDEX, grade, LAYER_STRENGTH, LEVEL_BONUS, MAX_LEVEL } from '../../shared/grades.js';
 import { GACHA, xpNeed, fitFlavors } from '../../shared/economy.js';
 import { sfx, setMuted, isMuted } from '../core/audio.js';
+import { drawMachine } from '../render/attractions.js';
 
 const badge = (gid) => { const g = grade(gid); return `<span class="badge g-${gid}" style="--gc:${g.color};--gg:${g.glow}">${g.name}</span>`; };
 
@@ -251,69 +252,156 @@ export function wardrobe(app, tab = 'flavor') {
 export function gachaMachine(app, kind) {
   const G = GACHA[kind];
   const p = app.profile.data;
-  const rates = GRADES.map((g) => `<span style="color:${g.color}">${g.name} ${g.rate}%</span>`).join(' · ');
-  const pool = G.pool;
-  const owned = pool.filter((x) => (kind === 'flavor' ? p.flavors : p.weapons)[x.id]).length;
+  const bag = kind === 'flavor' ? p.flavors : p.weapons;
+  const owned = G.pool.filter((x) => bag[x.id]).length;
+  const pity = Math.max(0, 60 - (p.pity[kind] || 0));
   const card = app.ui.modal('modal', `
-    <h2>${G.name}</h2>
-    <div class="sub">${kind === 'flavor' ? '맛' : '무기'} ${owned}/${pool.length} 수집 · 10연속 뽑기는 스프링클 등급 이상 1개 보장</div>
-    <div class="machine ${kind}"><div class="globe"><div class="caps"></div></div><div class="base"><div class="slot-o"></div></div></div>
-    <div class="rates">${rates}</div>
-    <div class="row">
-      <button class="btn ghost" data-a="x">닫기</button>
-      <button class="btn sky" data-n="1">1번 🍬 ${G.one.toLocaleString()}</button>
-      <button class="btn gold" data-n="10">10번 🍬 ${G.ten.toLocaleString()}</button>
+    <div class="g-head ${kind}">
+      <div class="g-kicker">${kind === 'flavor' ? 'FLAVOR GACHA' : 'WEAPON GACHA'}</div>
+      <h2>${G.name}</h2>
+      <div class="g-progress"><i style="width:${(owned / G.pool.length) * 100}%"></i><span>${kind === 'flavor' ? '맛' : '무기'} 도감 ${owned} / ${G.pool.length}</span></div>
     </div>
-    <div class="err"></div>`);
-  const caps = card.querySelector('.caps');
-  for (let i = 0; i < 16; i++) {
-    const c = h(`<i style="left:${8 + Math.random() * 76}%;top:${30 + Math.random() * 55}%;--c:${GRADES[(Math.random() * 6) | 0].color};animation-delay:${-Math.random() * 2}s"></i>`);
-    caps.appendChild(c);
-  }
+    <div class="g-stage"><canvas class="g-machine"></canvas><div class="g-pity">젤라또+ 보장<b>${pity}</b>회 남음</div></div>
+    <div class="g-rates">${GRADES.map((g) => `<span class="g-rate" style="--gc:${g.color}"><i></i>${g.name}<b>${g.rate}%</b></span>`).join('')}</div>
+    <div class="g-buttons">
+      <button class="g-btn one" data-n="1"><span class="g-n">1회 뽑기</span><span class="g-price">🍬 ${G.one.toLocaleString()}</span></button>
+      <button class="g-btn ten" data-n="10"><span class="g-ribbon">스프링클+ 1개 보장</span><span class="g-n">10회 뽑기</span><span class="g-price">🍬 ${G.ten.toLocaleString()}</span></button>
+    </div>
+    <div class="err"></div>
+    <button class="g-close" data-a="x" aria-label="닫기">✕</button>`);
+  card.classList.add('gacha-card', 'theme-' + kind);
+  const st = { shake: 0, knob: 0, drop: null, dropColor: null };
+  // the machine is ~600 units tall; fit it to the screen height so phones don't have to scroll
+  const H = Math.round(Math.max(250, Math.min(450, innerHeight - 370))), W = Math.round(H * 0.74);
+  animCanvas(card.querySelector('.g-machine'), W, H, (g, t) => {
+    g.translate(W / 2, H - 10);
+    g.scale(H / 620, H / 620);
+    drawMachine(g, kind, t, st);
+  });
   card.querySelector('[data-a=x]').onclick = () => app.ui.remove('modal');
   card.querySelectorAll('[data-n]').forEach((b) => (b.onclick = async () => {
     const n = +b.dataset.n;
     card.querySelectorAll('button').forEach((x) => (x.disabled = true));
-    card.querySelector('.machine').classList.add('spin');
-    sfx.open();
     const r = await app.profile.act('gacha', kind, n);
     if (!r.ok) {
-      card.querySelector('.machine').classList.remove('spin');
       card.querySelector('.err').textContent = r.error;
       card.querySelectorAll('button').forEach((x) => (x.disabled = false));
       return;
     }
-    setTimeout(() => gachaReveal(app, kind, r.results), 900);
+    // shake the machine, crank the knob, roll a capsule out in the best result's colour
+    sfx.open();
+    const best = Math.max(...r.results.map((x) => GRADE_INDEX[x.grade]));
+    st.dropColor = GRADES[best].color;
+    const t0 = performance.now();
+    const spin = () => {
+      const k = (performance.now() - t0) / 1000;
+      st.shake = k < 0.9 ? Math.sin(Math.min(1, k / 0.9) * Math.PI) : 0;
+      st.knob = easeInOut(Math.min(1, k / 0.9)) * Math.PI * 4;
+      if (k > 0.9) { if (st.drop == null) sfx.pop(); st.drop = Math.min(1, (k - 0.9) / 0.8); }
+      if (k < 1.8) requestAnimationFrame(spin);
+      else gachaReveal(app, kind, r.results);
+      if (k > 0.3 && k < 0.35) sfx.click();
+    };
+    requestAnimationFrame(spin);
   }));
 }
 
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+// Runs a draw loop on a canvas for as long as it stays on the page.
+export function animCanvas(canvas, w, h, draw) {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const g = canvas.getContext('2d');
+  const start = performance.now();
+  const loop = (now) => {
+    if (!canvas.isConnected) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    g.save();
+    draw(g, (now - start) / 1000);
+    g.restore();
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
 function gachaReveal(app, kind, results) {
+  const many = results.length > 1;
   const best = Math.max(...results.map((r) => GRADE_INDEX[r.grade]));
+  const bg = GRADES[best];
   const table = kind === 'flavor' ? FLAVOR : WEAPON;
   const card = app.ui.modal('modal', `
-    <h2>${results.length > 1 ? '10연속 결과!' : '두근두근…'}</h2>
-    <div class="reveal ${results.length > 1 ? 'many' : 'one'}"></div>
-    <div class="row" style="margin-top:14px"><button class="btn ghost" data-a="x">닫기</button><button class="btn" data-a="again">한 번 더</button><button class="btn mint" data-a="ward">바로 장착하기</button></div>`, { closable: false });
-  card.classList.add('wide');
-  const box = card.querySelector('.reveal');
-  results.forEach((r, i) => {
+    <div class="rv-bg" style="--gc:${bg.color};--gg:${bg.glow}"></div>
+    <div class="rv-title">${many ? '10연속 결과!' : '두근두근…'}</div>
+    <div class="rv-stage ${many ? 'many' : 'one'}"></div>
+    <div class="rv-hint">${many ? '캡슐을 눌러서 열어요' : '캡슐을 눌러서 열어요!'}</div>
+    <div class="row rv-actions" style="visibility:hidden">
+      <button class="btn ghost" data-a="x">닫기</button>
+      <button class="btn" data-a="again">한 번 더</button>
+      <button class="btn mint" data-a="ward">바로 장착하기</button>
+    </div>`, { closable: false });
+  card.classList.add('reveal-card', many ? 'wide' : 'solo');
+  if (best >= GRADE_INDEX.gelato) card.classList.add('rare');
+  if (best >= GRADE_INDEX.aurora) card.classList.add('legend');
+  const stage = card.querySelector('.rv-stage');
+  let opened = 0;
+  const finish = () => {
+    card.querySelector('.rv-actions').style.visibility = 'visible';
+    card.querySelector('.rv-hint').textContent = best >= GRADE_INDEX.aurora ? '전설급 등장!!' : best >= GRADE_INDEX.gelato ? '대박! 좋은 게 나왔어요!' : '';
+  };
+  const items = results.map((r, i) => {
     const it = table[r.id];
     const g = grade(r.grade);
-    const el = h(`<div class="cap g-${r.grade}" style="--gc:${g.color};--gg:${g.glow};animation-delay:${i * 0.12}s">
-      <div class="burst"></div>
-      <div class="ic"></div>
-      <div class="gn">${g.name}</div>
-      <div class="nm">${esc(it.name)}</div>
-      <div class="tag">${r.isNew ? 'NEW!' : r.refund ? `+🍬${r.refund}` : `Lv.${r.level}`}</div>
-      ${results.length === 1 ? `<div class="ds">${esc(it.desc)}</div>` : ''}
+    const el = h(`<div class="rv-item g-${r.grade}" style="--gc:${g.color};--gg:${g.glow};--d:${i * 0.07}s">
+      <div class="cap-ball"><i class="top"></i><i class="bot"></i></div>
+      <div class="rv-card">
+        <div class="rays"></div>
+        <div class="ic"></div>
+        <div class="gn">${g.name}</div>
+        <div class="nm">${esc(it.name)}</div>
+        <div class="tag">${r.isNew ? 'NEW!' : r.refund ? `+🍬${r.refund}` : `Lv.${r.level}`}</div>
+        ${many ? '' : `<div class="ds">${esc(it.desc)}</div>`}
+      </div>
     </div>`);
-    el.querySelector('.ic').appendChild(iconCanvas(kind, r.id, results.length > 1 ? 64 : 120));
-    box.appendChild(el);
+    el.querySelector('.ic').appendChild(iconCanvas(kind, r.id, many ? 64 : 130));
+    const open = () => {
+      if (el.classList.contains('open')) return;
+      el.classList.add('open');
+      const gi = GRADE_INDEX[r.grade];
+      sfx.gacha(gi);
+      if (gi >= GRADE_INDEX.gelato) confetti(el, g.color);
+      if (++opened === results.length) setTimeout(finish, 350);
+    };
+    el.onclick = open;
+    el.open = open;
+    stage.appendChild(el);
+    return el;
   });
-  setTimeout(() => sfx.gacha(best), 150);
+  if (many) {
+    const skip = h('<button class="btn small ghost rv-skip">모두 열기</button>');
+    skip.onclick = () => { items.forEach((el, i) => setTimeout(() => el.open(), i * 110)); skip.remove(); };
+    card.appendChild(skip);
+  } else setTimeout(() => items[0].open(), 1300);
   card.querySelector('[data-a=x]').onclick = () => app.ui.remove('modal');
   card.querySelector('[data-a=again]').onclick = () => gachaMachine(app, kind);
   card.querySelector('[data-a=ward]').onclick = () => wardrobe(app, kind);
+}
+
+function confetti(el, color) {
+  const cols = [color, '#ffffff', '#ffe066', '#ff8fb4', '#8fd3ff'];
+  for (let i = 0; i < 26; i++) {
+    const c = document.createElement('span');
+    c.className = 'confetti';
+    const a = Math.random() * Math.PI * 2, d = 60 + Math.random() * 110;
+    c.style.setProperty('--x', Math.cos(a) * d + 'px');
+    c.style.setProperty('--y', Math.sin(a) * d - 40 + 'px');
+    c.style.setProperty('--r', Math.random() * 720 - 360 + 'deg');
+    c.style.background = cols[i % cols.length];
+    el.appendChild(c);
+    setTimeout(() => c.remove(), 1200);
+  }
 }
 
 // ── face shop ───────────────────────────────────────────────

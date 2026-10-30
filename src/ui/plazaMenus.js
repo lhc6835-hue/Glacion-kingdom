@@ -6,6 +6,8 @@ import { FLAVOR } from '../../shared/flavors.js';
 import { dailyCandidates, dayKey } from '../../shared/economy.js';
 import { sfx } from '../core/audio.js';
 import { ArenaScene } from '../scenes/arenaScene.js';
+import { animCanvas } from './menus.js';
+import { drawGate } from '../render/attractions.js';
 
 const TIPS = [
   '맨 위 스쿱이 가장 먼저 녹아요. 제일 강한 맛을 맨 위에 올려보세요!',
@@ -86,43 +88,57 @@ export function fountainWish(app, done) {
 export function playZone(app) {
   const online = app.net && app.net.online;
   const card = app.ui.modal('modal', `
-    <h2>플레이 존</h2>
-    <div class="sub">방을 만들고 친구들과 함께 버텨요!</div>
-    <div class="tabs"><button data-t="make" class="on">방 만들기</button><button data-t="list">방 목록</button></div>
-    <div class="pane"></div>`);
+    <div class="pz-hero"><canvas class="pz-gate"></canvas><div class="pz-titles"><div class="g-kicker">PLAY ZONE</div><h2>플레이 존</h2><div class="sub">방을 만들고 친구들과 함께 버텨요!</div></div></div>
+    <div class="tabs pz-tabs"><button data-t="make" class="on">✨ 방 만들기</button><button data-t="list">🍨 방 목록</button></div>
+    <div class="pane"></div>
+    <button class="g-close" data-a="x" aria-label="닫기">✕</button>`);
+  card.classList.add('pz-card');
+  animCanvas(card.querySelector('.pz-gate'), 170, 170, (g, t) => { g.translate(85, 160); g.scale(0.36, 0.36); drawGate(g, t); });
+  card.querySelector('[data-a=x]').onclick = () => app.ui.remove('modal');
   const pane = card.querySelector('.pane');
+  const lo = app.profile.data.loadout;
   const make = () => {
     let max = 1;
     pane.innerHTML = `
-      <label class="note">방 이름</label>
+      <label class="pz-label">방 이름</label>
       <input class="field" maxlength="20" value="${esc(app.profile.data.name)}의 방">
-      <label class="note">인원 수</label>
-      <div class="seg">${[1, 2, 3, 4].map((n) => `<button data-n="${n}" class="${n === 1 ? 'on' : ''}">${n}명</button>`).join('')}</div>
-      <label class="check"><input type="checkbox" class="priv"> 비공개 방 (코드로만 입장)</label>
+      <label class="pz-label">함께할 인원</label>
+      <div class="pz-seats">${[1, 2, 3, 4].map((n) => `<button data-n="${n}" class="${n === 1 ? 'on' : ''}"><span class="cones"></span><b>${n}명</b><small>${['혼자서 집중', '둘이서 오붓하게', '셋이서 든든하게', '넷이서 와글와글'][n - 1]}</small></button>`).join('')}</div>
+      <button class="pz-switch"><i></i><span>비공개 방 (코드로만 입장)</span></button>
       <div class="err"></div>
-      <div class="row"><button class="btn" data-a="go">방 만들기</button></div>
-      ${online ? '' : '<div class="note" style="text-align:center">혼자 하기는 바로 가능해요. 여럿이 하려면 로그인해 주세요.</div>'}`;
-    pane.querySelectorAll('[data-n]').forEach((b) => (b.onclick = () => { max = +b.dataset.n; pane.querySelectorAll('[data-n]').forEach((x) => x.classList.toggle('on', x === b)); }));
+      <button class="pz-go" data-a="go"><span>방 만들고 출발!</span></button>
+      ${online ? '' : '<div class="note" style="text-align:center">혼자 하기는 바로 할 수 있어요. 여럿이 하려면 로그인해 주세요.</div>'}`;
+    pane.querySelectorAll('[data-n]').forEach((b) => {
+      const box = b.querySelector('.cones');
+      for (let i = 0; i < +b.dataset.n; i++) box.appendChild(iconCanvas('flavor', lo.flavors[i % lo.flavors.length] || 'milk', 26));
+      b.onclick = () => { sfx.click(); max = +b.dataset.n; pane.querySelectorAll('[data-n]').forEach((x) => x.classList.toggle('on', x === b)); };
+    });
+    let priv = false;
+    const sw = pane.querySelector('.pz-switch');
+    sw.onclick = () => { priv = !priv; sw.classList.toggle('on', priv); sfx.click(); };
     pane.querySelector('[data-a=go]').onclick = async () => {
       sfx.click();
       if (max === 1) { app.ui.remove('modal'); app.go(new ArenaScene(app)); return; }
       if (!online) { pane.querySelector('.err').textContent = '여럿이 하려면 로그인이 필요해요'; return; }
       const name = pane.querySelector('.field').value.trim() || '아이스크림 방';
-      const priv = pane.querySelector('.priv').checked;
       try { await app.net.createRoom({ name, max, priv }); } catch (e) { pane.querySelector('.err').textContent = e.message; }
     };
   };
   const list = async () => {
-    if (!online) { pane.innerHTML = '<div class="sub">방 목록은 로그인하면 볼 수 있어요.</div>'; return; }
-    pane.innerHTML = '<div class="sub">불러오는 중…</div>';
+    if (!online) { pane.innerHTML = '<div class="pz-empty"><b>🔒</b>방 목록은 로그인하면 볼 수 있어요.</div>'; return; }
+    pane.innerHTML = '<div class="pz-empty"><b class="spin">🍦</b>불러오는 중…</div>';
     const rooms = await app.net.listRooms().catch(() => []);
-    pane.innerHTML = `<div class="rooms">${rooms.map((r) => `<div class="room"><b>${esc(r.name)}</b><span>${r.count}/${r.max}명 · ${r.started ? '진행 중' : '대기 중'}</span><button class="btn small" data-id="${esc(r.id)}" ${r.count >= r.max || r.started ? 'disabled' : ''}>입장</button></div>`).join('') || '<div class="sub">열린 방이 없어요. 직접 만들어 봐요!</div>'}</div>
-      <div class="row" style="margin-top:10px"><input class="field code" placeholder="방 코드로 입장" maxlength="6" style="max-width:180px;margin:0"><button class="btn small sky" data-a="code">입장</button><button class="btn small ghost" data-a="re">새로고침</button></div><div class="err"></div>`;
+    pane.innerHTML = `<div class="rooms">${rooms.map((r) => `<div class="pz-room">
+        <div class="pz-room-info"><b>${esc(r.name)}</b><span class="chip ${r.started ? 'busy' : 'wait'}">${r.started ? '진행 중' : '대기 중'}</span></div>
+        <div class="pz-slots">${Array.from({ length: r.max }, (_, i) => `<i class="${i < r.count ? 'on' : ''}"></i>`).join('')}<span>${r.count}/${r.max}</span></div>
+        <button class="btn small" data-id="${esc(r.id)}" ${r.count >= r.max || r.started ? 'disabled' : ''}>입장</button>
+      </div>`).join('') || '<div class="pz-empty"><b>🌙</b>열린 방이 없어요. 직접 만들어 봐요!</div>'}</div>
+      <div class="pz-code"><input class="field code" placeholder="방 코드 6자리" maxlength="6"><button class="btn small sky" data-a="code">코드로 입장</button><button class="btn small ghost" data-a="re">↻</button></div><div class="err"></div>`;
     pane.querySelectorAll('[data-id]').forEach((b) => (b.onclick = () => app.net.joinRoom(b.dataset.id).catch((e) => (pane.querySelector('.err').textContent = e.message))));
     pane.querySelector('[data-a=re]').onclick = list;
     pane.querySelector('[data-a=code]').onclick = () => { const c = pane.querySelector('.code').value.trim().toUpperCase(); if (c) app.net.joinRoom(c).catch((e) => (pane.querySelector('.err').textContent = e.message)); };
   };
-  card.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => { card.querySelectorAll('[data-t]').forEach((x) => x.classList.toggle('on', x === b)); b.dataset.t === 'make' ? make() : list(); }));
+  card.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => { sfx.click(); card.querySelectorAll('[data-t]').forEach((x) => x.classList.toggle('on', x === b)); b.dataset.t === 'make' ? make() : list(); }));
   make();
 }
 
