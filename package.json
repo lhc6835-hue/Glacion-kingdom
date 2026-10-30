@@ -1,7 +1,7 @@
 {
-  "name": "glacion-kingdom",
+  "name": "glacion-icecream",
   "version": "0.1.0",
-  "description": "Kingdom of Glacion — open-world fantasy RPG (browser, Three.js)",
+  "description": "녹지 마, 아이스크림! — wave survival game starring an ice cream (browser, Canvas 2D)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,13 +12,7 @@
     "type": "git",
     "url": "git+https://github.com/lhc6835-hue/Glacion-kingdom.git"
   },
-  "bugs": {
-    "url": "https://github.com/lhc6835-hue/Glacion-kingdom/issues"
-  },
   "homepage": "https://github.com/lhc6835-hue/Glacion-kingdom#readme",
-  "dependencies": {
-    "three": "^0.170.0"
-  },
   "devDependencies": {
     "vite": "^5.4.11"
   },
