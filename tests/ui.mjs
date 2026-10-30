@@ -16,7 +16,7 @@ const use = async (id, name) => {
   await p.screenshot({ path: `${out}_${name}.png` });
 };
 await use('gflavor', 'gacha');
-await p.click('[data-n="10"]'); await p.waitForTimeout(2200); await p.screenshot({ path: `${out}_gacha10.png` });
+await p.click('[data-n="10"]'); await p.waitForTimeout(2600); await p.click('.rv-skip'); await p.waitForTimeout(2000); await p.screenshot({ path: `${out}_gacha10.png` });
 await p.click('.overlay [data-a="ward"]'); await p.waitForTimeout(800); await p.screenshot({ path: `${out}_ward.png` });
 await p.click('.overlay [data-a="save"]'); await p.waitForTimeout(400);
 await use('board', 'board');
