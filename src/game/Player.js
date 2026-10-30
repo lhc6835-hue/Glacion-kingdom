@@ -38,6 +38,9 @@ export class Player {
     this.sq = 0; this.sqV = 0;        // + stretch, − squash
     this.rot = 0; this.rotV = 0;      // body tilt (radians, toward facing)
     this.axe = REST_ANGLE; this.axeV = 0;
+    this.hx = 5.5; this.hy = 1.5; this.hxV = 0; this.hyV = 0; // hand offset from the shoulder
+    this.lunge = 0; this.lungeV = 0;
+    this.len = 1; this.depth = 1; this.swoosh = null;
     this.lastLanded = false;
     this.events = null;
   }
@@ -115,46 +118,87 @@ export class Player {
     const t = performance.now() / 1000;
     const moving = this.onGround && speed > 8;
     const s = combat.swing;
-    // squash target: stretch while rising, a little squash on the way down
+    // resting targets; the swing below overrides them
     let sqT = this.onGround ? 0 : clamp(-this.vy / 650, -0.12, 0.2);
     let rotT = this.onGround ? clamp(this.vx * this.facing / RUN, -1, 1) * 0.1 : clamp(this.vy / 900, -0.08, 0.12);
     let axeT = REST_ANGLE + (moving ? Math.sin(this.walkPhase * 1.43) * 0.16 : Math.sin(t * 3.2) * 0.05) + (this.onGround ? 0 : -0.4);
-    let drive = null, smear = 0, mouth = this.surpriseT > 0;
+    let handT = this.onGround ? [5.5, 1.5 + (moving ? Math.sin(this.walkPhase * 1.43) * 0.6 : 0)] : [4, -1];
+    let lungeT = 0;
+    let drive = null, hand = null, len = null, depth = null, flip = false, behind = false, smear = 0, mouth = this.surpriseT > 0;
     if (this.gatherT > 0) sqT = -0.18;
-    if (s && s !== this.curSwing) { this.curSwing = s; this.windFrom = this.axe; this.lastLanded = false; }
+    if (s && s !== this.curSwing) {
+      this.curSwing = s; this.windFrom = this.axe; this.handFrom = [this.hx, this.hy]; this.lastLanded = false; this.yanked = false;
+    }
     if (!s) this.curSwing = null;
     if (s) {
-      const w = SWING.windup, k = SWING.strike, f = SWING.follow;
+      // Side chop: cock the axe back over the shoulder, sweep it around the front of the body
+      // (it swings toward the camera, so the shaft foreshortens and the head grows), then bite.
+      const W = SWING.windup, K = SWING.strike, F = SWING.follow;
       const miss = s.j === 'miss', crit = s.j === 'crit';
-      const endA = miss ? 2.35 : 1.78;
-      if (s.t < w) {
-        // anticipation: pull back past the top, rise on the toes
-        const u = s.t / w;
-        drive = lerp(this.windFrom ?? REST_ANGLE, -1.2, easeOutBack(u, 1.4));
-        rotT = -0.16; sqT = 0.16;
-      } else if (s.t < w + k) {
-        const u = (s.t - w) / k;
-        drive = lerp(-1.2, endA, easeIn3(u));
-        smear = u; rotT = lerp(-0.16, 0.2, u); sqT = lerp(0.16, -0.05, u);
+      const col = crit ? '#8fd0ff' : s.j === 'great' ? '#a8f0b8' : miss ? '#c8c8c0' : '#fff0c8';
+      if (s.t < W) {
+        const u = s.t / W, e = easeOutBack(u, 1.6);
+        drive = lerp(this.windFrom ?? REST_ANGLE, -1.38, e);
+        const h = this.handFrom || [5.5, 1.5], eo = 1 - (1 - u) * (1 - u);
+        hand = [lerp(h[0], -6.5, eo), lerp(h[1], -5, eo)];
+        flip = u > 0.55; behind = u > 0.08; // swung behind the body straight away, never across the face
+        rotT = -0.22; lungeT = -1.8; sqT = 0.15;
+        this.swoosh = null;
+      } else if (s.t < W + K) {
+        const u = (s.t - W) / K, e = Math.pow(u, 1.7);
+        const phi = lerp(Math.PI + 0.25, miss ? -0.15 : 0.08, e);
+        const c = Math.cos(phi), sn = Math.sin(phi);
+        drive = c < 0 ? -Math.PI / 2 + 0.2 * (1 + c) - 0.2 : Math.PI / 2 - 0.12;
+        len = Math.max(0.16, Math.abs(c));
+        depth = 1 + 0.4 * Math.max(0, sn);
+        flip = c < 0; behind = c < -0.75;
+        hand = [lerp(-6.5, 7, (1 - c) / 2), lerp(-5, -3.5, e) + 2.6 * Math.max(0, sn)];
+        smear = e;
+        rotT = lerp(-0.22, 0.13, e); lungeT = lerp(-1.8, 3, e); sqT = lerp(0.15, -0.1, e);
+        this.swoosh = { p: clamp((Math.PI - phi) / Math.PI, 0, 1), a: 1, col };
+      } else if (s.t < W + K + F) {
+        const u = (s.t - W - K) / F;
+        if (miss) {
+          // nothing to stop it: the axe whips round to the far side and the hero stumbles
+          const phi = lerp(-0.15, -1.35, 1 - (1 - u) * (1 - u));
+          const c = Math.cos(phi), sn = Math.sin(phi);
+          drive = Math.PI / 2 - 0.12; len = Math.max(0.2, c); depth = 1 + 0.25 * sn;
+          behind = true; hand = [lerp(7, 3.5, u), -3.5 + 2.6 * sn];
+          rotT = 0.34; lungeT = 3.8;
+        } else {
+          // stuck in the trunk, quivering
+          drive = Math.PI / 2 - 0.12 + Math.sin(t * 90) * 0.06 * (1 - u);
+          hand = [7 + Math.sin(t * 70) * 0.3 * (1 - u), -3.2];
+          rotT = 0.12; lungeT = 2.6; mouth = crit;
+        }
+        if (this.swoosh) this.swoosh.a = 1 - u;
       } else {
-        axeT = s.t < w + k + f ? endA : REST_ANGLE;
-        rotT = s.t < w + k + f ? 0.14 : 0;
-        if (s.t < w + k + f) mouth = crit;
+        // recover: yank the axe free and let the springs settle back to the ready pose
+        if (!this.yanked) { this.yanked = true; this.axeV = -9; this.hxV = -40; }
+        if (this.swoosh) this.swoosh.a = Math.max(0, this.swoosh.a - dt * 8);
       }
       if (s.landed && !this.lastLanded) {
-        // impact: the body squashes into the blow and the axe's momentum carries it on
         this.lastLanded = true;
-        this.kick(crit ? -0.42 : miss ? 0.05 : -0.26, miss ? 0.5 : 0.25);
-        this.axeV = miss ? 22 : crit ? 14 : 9;
+        this.kick(crit ? -0.42 : miss ? 0.06 : -0.28, miss ? 0.45 : 0.18);
       }
+    } else if (this.swoosh) {
+      this.swoosh.a -= dt * 8;
+      if (this.swoosh.a <= 0) this.swoosh = null;
     }
-    if (this.cheerT > 0) { axeT = -0.15; sqT = Math.abs(Math.sin(this.cheerT * 9)) * 0.22; mouth = true; }
+    if (this.cheerT > 0) { axeT = -0.15; handT = [1, -9]; sqT = Math.abs(Math.sin(this.cheerT * 9)) * 0.22; mouth = true; }
 
     spring(this, 'sq', 'sqV', sqT, 300, 15, dt);       // jelly: under-damped, overshoots once
     this.sq = clamp(this.sq, -0.3, 0.32);
-    spring(this, 'rot', 'rotV', rotT, 220, 16, dt);
+    spring(this, 'rot', 'rotV', rotT, 260, 16, dt);
+    spring(this, 'lunge', 'lungeV', lungeT, 320, 18, dt);
     if (drive !== null) { this.axeV = (drive - this.axe) / Math.max(dt, 1e-3); this.axe = drive; }
     else spring(this, 'axe', 'axeV', axeT, 380, 17, dt);
+    if (hand) {
+      this.hxV = (hand[0] - this.hx) / Math.max(dt, 1e-3); this.hyV = (hand[1] - this.hy) / Math.max(dt, 1e-3);
+      this.hx = hand[0]; this.hy = hand[1];
+    } else { spring(this, 'hx', 'hxV', handT[0], 420, 22, dt); spring(this, 'hy', 'hyV', handT[1], 420, 22, dt); }
+    this.len = len ?? this.len + (1 - this.len) * Math.min(1, dt * 16);
+    this.depth = depth ?? this.depth + (1 - this.depth) * Math.min(1, dt * 16);
 
     const p = this.pose;
     p.blink = this.blinkT < 0;
@@ -169,6 +213,13 @@ export class Player {
     p.scarfA = this.scarf;
     p.axeOnBack = false;
     p.axeAngle = this.axe;
+    p.axeLen = this.len;
+    p.axeDepth = this.depth;
+    p.bladeFlip = flip;
+    p.axeBehind = behind;
+    p.hand = { x: this.hx, y: this.hy };
+    p.lunge = this.lunge;
+    p.swoosh = this.swoosh;
     p.sq = this.sq;
     p.rot = this.rot;
     p.smear = smear;

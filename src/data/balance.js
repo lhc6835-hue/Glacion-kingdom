@@ -16,9 +16,9 @@ export const JUDGE = {
 };
 
 export const SWING = {
-  windup: 0.09,   // raise the axe
-  strike: 0.06,   // fast drop to impact
-  follow: 0.08,   // weight carries through
+  windup: 0.11,   // cock the axe back over the shoulder
+  strike: 0.07,   // sweep around the front of the body to impact
+  follow: 0.1,    // the axe bites (or whips round on a miss)
   recover: 0.2,   // back to ready; the next swing can be queued from here
 };
 

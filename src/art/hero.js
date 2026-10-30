@@ -58,12 +58,14 @@ function axeSprite(axe) {
 }
 
 // Draws the axe with its grip at (hx, hy), rotated by th (0 = head up, + = forward).
-export function drawAxe(g, hx, hy, th, axe, scale = 1, alpha = 1) {
+// len < 1 foreshortens the shaft (the axe pointing at the camera mid-swing); flip mirrors the
+// blade to the other side of the shaft so it always hangs below a horizontal swing.
+export function drawAxe(g, hx, hy, th, axe, scale = 1, alpha = 1, len = 1, flip = false) {
   const s = axeSprite(axe);
   g.save();
   g.translate(hx, hy);
   g.rotate(th);
-  if (scale !== 1) g.scale(scale, scale);
+  if (scale !== 1 || len !== 1 || flip) g.scale(scale * (flip ? -1 : 1), scale * len);
   g.globalAlpha *= alpha;
   g.drawImage(s, -6.5, -9);
   g.restore();
@@ -86,7 +88,7 @@ export function drawHero(g, x, y, facing, pose, axe) {
   g.fillStyle = 'rgba(0,0,0,0.32)';
   const shw = 13 * (1 - sq * 0.8) * (pose.onGround ? 1 : 0.7);
   g.fillRect(x - shw / 2, y, shw, 1);
-  g.translate(x, y + 1);
+  g.translate(x + (pose.lunge || 0) * dir, y + 1);
   g.rotate(((pose.rot || 0) + (pose.sway || 0)) * dir);
   g.scale((1 - sq * 0.6 - br * 0.6) * flip, 1 + sq + br);
   const top = -sh + (pose.bob || 0);
@@ -101,19 +103,35 @@ export function drawHero(g, x, y, facing, pose, axe) {
       g.fillRect(px - 0.5 - ext * 0.5, py - 0.5 - ext * 0.5, 1 + ext, 1 + ext);
     }
   }
-  // hand: rests at the belt, rises over the head while winding up, drops forward on impact
+  // hand: anchored at the shoulder; the player drives its path (back for the wind-up, around the
+  // front for the side chop). Older poses without a hand fall back to the belt position.
   const ang = pose.axeAngle ?? 0.6;
-  const up = Math.max(0, Math.min(1, (0.6 - ang) / 1.85));
-  const fwd = Math.max(0, Math.min(1, (ang - 0.6) / 0.9));
-  const hx = -sw / 2 + 14.5 - up * 5 + fwd * 2, hy = top + 14.5 - up * 11 + fwd * 1;
+  const sx = -sw / 2 + 9, sy = top + 13;
+  const hx = sx + (pose.hand ? pose.hand.x : 5.5), hy = sy + (pose.hand ? pose.hand.y : 1.5);
+  const len = pose.axeLen ?? 1, depth = pose.axeDepth ?? 1, bflip = !!pose.bladeFlip;
+  const swoosh = () => {
+    // crescent of the side swing, sweeping around the front of the body
+    const w = pose.swoosh;
+    if (!w || w.a <= 0.02) return;
+    const end = Math.PI - Math.PI * w.p;
+    g.save();
+    g.lineCap = 'round';
+    for (const [lw, col, al] of [[5, w.col, 0.35], [2.6, w.col, 0.75], [1.1, '#ffffff', 0.95]]) {
+      g.strokeStyle = col; g.globalAlpha = w.a * al; g.lineWidth = lw;
+      g.beginPath(); g.ellipse(sx + 1, sy - 1, 14, 4.5, -0.06, Math.PI, Math.min(Math.PI, end), true); g.stroke();
+    }
+    g.restore();
+  };
   const tool = () => {
     if (pose.axeOnBack) { drawAxe(g, -4, top + 15, -2.5, axe, 0.9); return; }
-    if (pose.smear > 0.15) for (let i = 1; i <= 3; i++) drawAxe(g, hx, hy, ang - 0.36 * i * pose.smear, axe, 1, 0.3 - i * 0.08);
-    drawAxe(g, hx, hy, ang, axe);
+    if (pose.smear > 0.15) for (let i = 1; i <= 2; i++) drawAxe(g, hx - i * 2.2, hy, ang, axe, depth, 0.28 - i * 0.1, len, bflip);
+    drawAxe(g, hx, hy, ang, axe, depth, 1, len, bflip);
   };
-  const behind = pose.axeOnBack || ang < -0.35;
+  // behind the body while cocked back or swinging around the far side
+  const behind = pose.axeOnBack || pose.axeBehind || (!pose.hand && ang < -0.35);
   if (behind) tool();
   g.drawImage(spr, -sw / 2, top);
+  swoosh();
   if (!behind) tool();
   g.restore();
 }

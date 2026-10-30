@@ -31,7 +31,7 @@ if (process.argv[3] === 'move') {
   await page.evaluate(() => { const g = window.__axenfall; g.input.keys.add(' '); g.input.pressed.add(' '); });
   for (let i = 0; i < 9; i++) { await page.evaluate(() => window.__axenfall.step(4)); await snap(); }
 } else {
-  await page.evaluate(() => { const g = window.__axenfall; g.combat.phase = 0.5; g.combat.attack(g.now); });
-  for (let i = 0; i < 12; i++) { await page.evaluate(() => window.__axenfall.step(3)); await snap(); }
+  await page.evaluate((pos) => { const g = window.__axenfall; g.combat.phase = pos; g.combat.attack(g.now); }, +(process.env.POS || 0.5));
+  for (let i = 0; i < 16; i++) { await page.evaluate(() => window.__axenfall.step(2)); await snap(); }
 }
 await browser.close(); server.close();

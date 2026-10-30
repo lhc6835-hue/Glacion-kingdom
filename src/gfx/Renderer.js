@@ -59,7 +59,7 @@ export class Renderer {
   }
 
   flash(x, y, size, color, life = 0.12) { this.flashes.push({ x, y, size, color, t: 0, life }); }
-  trail(x, y, from, to, color) { this.trails.push({ x, y, from, to, color, t: 0 }); }
+  trail(x, y, dir, color) { this.trails.push({ x, y, dir, color, t: 0 }); }
 
   // Parallax strip draw, tiled horizontally. bottom: screen y of the strip's bottom at the default camera.
   strip(g, s, camX, camY0, camY, bottom, fx = s.f) {
@@ -475,13 +475,15 @@ export class Renderer {
     for (let i = this.trails.length - 1; i >= 0; i--) {
       const tr = this.trails[i];
       tr.t += f.dt;
-      if (tr.t > 0.14) { this.trails.splice(i, 1); continue; }
-      const u = 1 - tr.t / 0.14;
+      if (tr.t > 0.18) { this.trails.splice(i, 1); continue; }
+      const u = 1 - tr.t / 0.18;
       lg.strokeStyle = tr.color;
-      lg.globalAlpha = u * 0.8;
-      lg.lineWidth = 6 * u + 1;
+      lg.globalAlpha = u * 0.85;
+      lg.lineWidth = 9 * u + 1;
       lg.beginPath();
-      lg.arc((tr.x - camX) * 2, (tr.y - camY) * 2, 26, tr.from, tr.to, tr.to < tr.from);
+      // horizontal sweep around the front of the body, from behind to the trunk
+      if (tr.dir > 0) lg.ellipse((tr.x - camX) * 2, (tr.y - camY) * 2, 34, 8, -0.06, Math.PI, -0.05, true);
+      else lg.ellipse((tr.x - camX) * 2, (tr.y - camY) * 2, 34, 8, 0.06, 0, Math.PI + 0.05, false);
       lg.stroke();
     }
     lg.globalAlpha = 1;

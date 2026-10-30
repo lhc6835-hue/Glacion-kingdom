@@ -217,7 +217,7 @@ export class Game {
         P.burst(crit ? 10 : 4, t.x, top, [art.logColor, '#3a6e4a', '#5a8a5a'], 26, 2.8, Math.PI / 2, 2.2, { grav: 18, drag: 0.8, kind: 1, size: 2, spin: Math.random() * 6 });
       }
       R.flash(ix, iy, crit ? 70 : h.j === 'great' ? 34 : 20, crit ? (h.void ? 'blue' : 'white') : 'white', crit ? 0.16 : 0.1);
-      R.trail(this.player.x + dir * 3, this.player.y - 9, dir > 0 ? -2.2 : -0.9, dir > 0 ? 0.5 : -3.6, crit ? '#8fd0ff' : h.j === 'great' ? '#a8f0b8' : '#fff0c8');
+      R.trail(this.player.x + dir * 2, this.player.y - 6, dir, crit ? '#8fd0ff' : h.j === 'great' ? '#a8f0b8' : '#fff0c8');
       if (crit) {
         P.burst(10, ix, iy, ['#ffffff', '#bfe6ff', '#5fb8ff'], 140, 6.28, 0, 0.3, { drag: 4, glow: 0.8, size: 1 });
         P.number(t.x, iy - 12, String(h.damage), '#8fd0ff', 2);
