@@ -121,9 +121,9 @@ export class ArenaWorld {
   }
 }
 
-const PROP_R = { tree: 30, tree2: 26, rock: 34, gum: 24, lamp: 10, lolli: 10, shroom: 16 };
+export const PROP_R = { tree: 30, tree2: 26, rock: 34, gum: 24, lamp: 10, lolli: 10, shroom: 16 };
 
-function star4(g, x, y, s) {
+export function star4(g, x, y, s) {
   if (s <= 0.3) return;
   g.beginPath(); g.moveTo(x, y - s); g.quadraticCurveTo(x, y, x + s, y); g.quadraticCurveTo(x, y, x, y + s); g.quadraticCurveTo(x, y, x - s, y); g.quadraticCurveTo(x, y, x, y - s); g.fill();
 }
@@ -213,9 +213,9 @@ function paintChunk(g, wx, wy, seed) {
   }
 }
 
-const FLOWERS = [['#ffb3cc', '#ffe066'], ['#fff6a6', '#ffb347'], ['#d6c2ff', '#fff6c2'], ['#ffffff', '#ffd25a'], ['#a8dcff', '#ffffff'], ['#ff9eb8', '#ffffff']];
+export const FLOWERS = [['#ffb3cc', '#ffe066'], ['#fff6a6', '#ffb347'], ['#d6c2ff', '#fff6c2'], ['#ffffff', '#ffd25a'], ['#a8dcff', '#ffffff'], ['#ff9eb8', '#ffffff']];
 
-function grassClump(g, x, y, r, s = 1) {
+export function grassClump(g, x, y, r, s = 1) {
   const h = (7 + r() * 7) * s;
   for (let k = -2; k <= 2; k++) {
     const gr = g.createLinearGradient(x, y, x, y - h);
@@ -226,7 +226,7 @@ function grassClump(g, x, y, r, s = 1) {
     g.beginPath(); g.moveTo(x + k * 1.8, y); g.quadraticCurveTo(x + k * 2 + lean * 0.3, y - h * 0.6, x + k * 1.5 + lean, y - h * (k === 0 ? 1.15 : 0.85)); g.stroke();
   }
 }
-function flower(g, x, y, [petal, center], r) {
+export function flower(g, x, y, [petal, center], r) {
   const s = 2.6 + r() * 1.8;
   g.fillStyle = 'rgba(70,140,90,0.25)'; g.beginPath(); g.ellipse(x + 1, y + s * 1.6, s * 1.4, s * 0.5, 0, 0, TAU); g.fill();
   g.strokeStyle = '#7fd09a'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y + s * 1.5); g.lineTo(x, y); g.stroke();
@@ -235,12 +235,12 @@ function flower(g, x, y, [petal, center], r) {
   g.fillStyle = center; g.beginPath(); g.arc(x, y, s * 0.55, 0, TAU); g.fill();
   g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.arc(x - s * 0.5, y - s * 0.5, s * 0.3, 0, TAU); g.fill();
 }
-function clover(g, x, y, r) {
+export function clover(g, x, y, r) {
   g.fillStyle = r() < 0.5 ? '#86d6a0' : '#9be0ac';
   for (let k = 0; k < 3; k++) { const a = (k / 3) * TAU - Math.PI / 2; g.beginPath(); g.arc(x + Math.cos(a) * 3.2, y + Math.sin(a) * 2.6, 3.2, 0, TAU); g.fill(); }
   g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.arc(x - 1, y - 3, 1.2, 0, TAU); g.fill();
 }
-function cookie(g, x, y, r) {
+export function cookie(g, x, y, r) {
   const s = 11 + r() * 6;
   g.fillStyle = 'rgba(90,120,80,0.2)'; g.beginPath(); g.ellipse(x + 2, y + 4, s * 1.05, s * 0.5, 0, 0, TAU); g.fill();
   const gr = g.createRadialGradient(x - s * 0.3, y - s * 0.3, 2, x, y, s);
@@ -250,14 +250,14 @@ function cookie(g, x, y, r) {
   for (let k = 0; k < 5; k++) { g.beginPath(); g.ellipse(x + (r() - 0.5) * s * 1.2, y + (r() - 0.5) * s * 0.7, 2.2, 1.6, r() * 3, 0, TAU); g.fill(); }
   g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.ellipse(x - s * 0.35, y - s * 0.25, s * 0.3, s * 0.12, -0.2, 0, TAU); g.fill();
 }
-function sprinkle(g, x, y, r) {
+export function sprinkle(g, x, y, r) {
   const cols = ['#ff7fa8', '#ffd84d', '#6fc2ff', '#b08cff', '#5fd6a0', '#ffffff'];
   g.strokeStyle = cols[(r() * cols.length) | 0];
   g.lineWidth = 2.8;
   const a = r() * TAU;
   g.beginPath(); g.moveTo(x - Math.cos(a) * 3.5, y - Math.sin(a) * 3.5); g.lineTo(x + Math.cos(a) * 3.5, y + Math.sin(a) * 3.5); g.stroke();
 }
-function candyPebbles(g, x, y, r) {
+export function candyPebbles(g, x, y, r) {
   for (let k = 0; k < 3; k++) {
     const px = x + (r() - 0.5) * 26, py = y + (r() - 0.5) * 14, s = 4 + r() * 3;
     const c = ['#ffb3cc', '#c9e8ff', '#fff1a6', '#d6fff0'][(r() * 4) | 0];
@@ -284,7 +284,7 @@ const propCache = new Map();
 const CANOPY = [['#ffd0e4', '#ffa6c9', '#ff86b4'], ['#d6e6ff', '#a9c6ff', '#8eaaf5'], ['#ecdcff', '#cdb0ff', '#b190f5'], ['#fff4c4', '#ffe08a', '#f5c45a']];
 
 // Fluffy canopy: shadow puffs, body puffs, then highlight puffs, all inside one outline.
-function canopy(g, cx, cy, R, cols, seed) {
+export function canopy(g, cx, cy, R, cols, seed) {
   const rr = rng(seed);
   const blobs = [];
   for (let i = 0; i < 11; i++) { const a = rr() * TAU, d = Math.sqrt(rr()) * R * 0.62; blobs.push([cx + Math.cos(a) * d * 1.15, cy + Math.sin(a) * d * 0.8, R * (0.42 + rr() * 0.2)]); }
@@ -304,7 +304,7 @@ function canopy(g, cx, cy, R, cols, seed) {
   });
 }
 
-function propSprite(kind, v) {
+export function propSprite(kind, v) {
   const key = kind + v;
   if (propCache.has(key)) return propCache.get(key);
   let s;

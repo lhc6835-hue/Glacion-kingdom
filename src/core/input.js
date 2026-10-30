@@ -66,6 +66,7 @@ export class Input {
     const w = innerWidth, h = innerHeight, s = Math.min(w, h);
     const r = clamp(s * 0.085, 30, 46);
     if (this.layout === 'arena') return [{ id: 'dash', label: '구르기', x: w - r * 1.4, y: h - r * 3.6, r: r * 0.9 }];
+    if (this.layout === 'plaza') return [{ id: 'interact', label: '대화', x: w - r * 1.6, y: h - r * 1.8, r }];
     if (this.layout === 'side') return [
       { id: 'jump', label: '점프', x: w - r * 1.5, y: h - r * 1.6, r },
       { id: 'interact', label: '대화', x: w - r * 3.7, y: h - r * 1.2, r: r * 0.85 },

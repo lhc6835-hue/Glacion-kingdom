@@ -68,7 +68,7 @@ export class ShopScene {
     this.me.y = 0; this.me.vx = 0; this.me.vy = 0;
     this.cam.x = this.me.x; this.cam.y = -60;
     this.spots = [];
-    if (f === 0) this.spots.push({ x: 90, label: '광장으로 나가기', act: () => this.app.goHome({ x: 420 }) });
+    if (f === 0) this.spots.push({ x: 90, label: '광장으로 나가기', act: () => this.app.goHome({ from: 'gallery' }) });
     this.molds.forEach((m, i) => {
       const x = X0 + i * GAP;
       this.spots.push({ x, mold: m, label: this.app.profile.data.molds[m.id] ? `${m.name} 보기` : '실루엣 살펴보기', act: () => moldCard(this.app, m.id, () => this.refreshLabels()) });
@@ -110,7 +110,7 @@ export class ShopScene {
     let bd = 90;
     for (const s of this.spots) { const d = Math.abs(s.x - this.me.x); if (d < bd) { bd = d; this.near = s; } }
     if (this.near && !modal && (input.pressed('interact') || input.pressed('tap'))) { sfx.open(); this.near.act(); }
-    if (input.pressed('esc') && !modal) this.app.goHome({ x: 420 });
+    if (input.pressed('esc') && !modal) this.app.goHome({ from: 'gallery' });
 
     if (this.fade) {
       this.fade.t += dt;

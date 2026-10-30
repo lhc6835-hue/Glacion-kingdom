@@ -200,7 +200,7 @@ export class Plaza {
     // one connection per account: a new tab replaces the old one
     for (const [id, p] of this.peers) if (p.uid === me.uid) { try { p.ws.close(4000, 'replaced'); } catch { /* already closed */ } this.drop(id); }
     const id = 'u' + ++this.seq;
-    const peer = { id, uid: me.uid, ws, name: me.name, level: me.level, look: me.look, x: 1700 + Math.random() * 600, y: 0, f: 1, chatT: 0, seen: Date.now() };
+    const peer = { id, uid: me.uid, ws, name: me.name, level: me.level, look: me.look, x: Math.round(Math.random() * 280 - 140), y: 260, f: 1, chatT: 0, seen: Date.now() };
     this.prune();
     this.peers.set(id, peer);
     ws.send(JSON.stringify({ t: 'welcome', you: id, players: [...this.peers.values()].filter((p) => p.id !== id).map(info) }));
