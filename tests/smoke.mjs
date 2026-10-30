@@ -150,6 +150,18 @@ try {
   await wait(60);
   check('Q uses the class ability (Focus)', await G(() => window.__axenfall.combat.focusUntil > window.__axenfall.now));
 
+  // ── inspecting the elder tree zooms out, walking zooms back in ──
+  await G(() => { const g = window.__axenfall; g.player.x = 925; });
+  await wait(100);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => window.__axenfall.engine.zoom < 0.8, null, { timeout: 5000 }).catch(() => {});
+  const zin = await G(() => ({ z: window.__axenfall.engine.zoom, H: window.__axenfall.engine.H }));
+  check('inspecting Mossroot zooms the camera out to frame it', zin.z < 0.8 && zin.H > 300, JSON.stringify(zin));
+  await wait(600);
+  await page.keyboard.down('d'); await wait(400); await page.keyboard.up('d');
+  const zback = await page.waitForFunction(() => window.__axenfall.engine.zoom > 0.99, null, { timeout: 6000 }).then(() => true, () => false);
+  check('moving eases the camera back in', zback);
+
   // ── World 2: the rock path, travel, and back ──
   await G(() => { const g = window.__axenfall; g.player.x = 2290; });
   await wait(100);

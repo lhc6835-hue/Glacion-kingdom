@@ -63,6 +63,7 @@ export class Game {
     this.ambient = new Ambient();
     this.timingBar = new TimingBar();
     this.cam = { x: 0, y: 0, shakeX: 0, shakeY: 0 };
+    this.zoom = { cur: 1, target: 1, focus: null, hold: 0 };
     this.camY0 = 0;
     this.trauma = 0;
     this.hitstop = 0;
@@ -150,12 +151,41 @@ export class Game {
     }, 650);
   }
 
+  // Smoothly zooms the camera out until `height` art pixels above the ground and `width` across
+  // fit on screen, centred on x. Moving, jumping or chopping zooms back in.
+  frameLandmark(x, height, width = 0) {
+    const e = this.engine;
+    const z = Math.min(1, (e.H0 - 6) / (height + 46), width ? e.W0 / width : 1);
+    this.zoom.target = z;
+    this.zoom.focus = x;
+    this.zoom.hold = 0.45;
+    this.player.vx = 0;
+  }
+
+  updateZoom(dt) {
+    const zm = this.zoom, e = this.engine, p = this.player;
+    if (zm.focus !== null) {
+      zm.hold -= dt;
+      const moved = Math.abs(p.vx) > 4 || !p.onGround || this.combat.target || this.ui.panel || this.traveling;
+      if (zm.hold <= 0 && moved) { zm.target = 1; zm.focus = null; }
+    }
+    if (Math.abs(zm.target - zm.cur) < 0.0005 && zm.cur === e.zoom) return;
+    // ease toward the target; keep the view centre where it is while the view size changes
+    const centre = this.cam.x + e.W / 2;
+    zm.cur += (zm.target - zm.cur) * (1 - Math.exp(-dt * 3.4));
+    if (Math.abs(zm.target - zm.cur) < 0.0005) zm.cur = zm.target;
+    e.setZoom(zm.cur);
+    this.layoutCam();
+    this.cam.x = centre - e.W / 2;
+    this.cam.y = this.camY0;
+  }
+
   // Look at a landmark: records it in the codex and shows its next line of lore.
   inspect(st) {
     const lines = LORE[st.id];
     this.state.codex.lore[st.id] = true;
     this.audio.play('chime');
-    if (st.kind === 'elder') this.elderPulse = 1.5;
+    if (st.kind === 'elder') { this.elderPulse = 1.5; const el = this.renderer.props.elder; this.frameLandmark(st.x, el.H + 70, el.W + 24); }
     if (!lines) return;
     const i = this.loreIdx[st.id] = ((this.loreIdx[st.id] ?? -1) + 1) % lines.length;
     this.ui.toast(`<b>${st.ko}</b> — ${lines[i]}`);
@@ -428,6 +458,7 @@ export class Game {
     this.processing.tick(dt);
     this.particles.update(worldDt);
     this.ambient.update(worldDt, this.now, this.player, this.day, this.events);
+    this.updateZoom(dt);
     this.followCam(dt);
     // screen shake from trauma (squared for a snappier falloff)
     this.trauma = Math.max(0, this.trauma - dt * 2.2);
@@ -493,7 +524,7 @@ export class Game {
     const e = this.engine;
     const p = this.player;
     const look = this.combat.target ? (this.combat.target.x - p.x) * 0.4 : p.facing * 18;
-    let tx = p.x + look - e.W / 2;
+    let tx = this.zoom.focus !== null ? this.zoom.focus - e.W / 2 : p.x + look - e.W / 2;
     tx = Math.max(0, Math.min(WORLD.width - e.W, tx));
     const dx = tx - this.cam.x;
     this.cam.x += dx * Math.min(1, dt * 3.2);

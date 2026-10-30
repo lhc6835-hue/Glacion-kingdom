@@ -73,10 +73,14 @@ export class Renderer {
   trail(x, y, dir, color) { this.trails.push({ x, y, dir, color, t: 0 }); }
 
   // Parallax strip draw, tiled horizontally. bottom: screen y of the strip's bottom at the default camera.
-  strip(g, s, camX, camY0, camY, bottom, fx = s.f) {
+  // extendUp: stretch the top pixel row up to the screen edge (tree trunks in a tall, zoomed-out view)
+  strip(g, s, camX, camY0, camY, bottom, fx = s.f, extendUp = false) {
     const ox = -((camX * fx) % STRIP_W + STRIP_W) % STRIP_W;
     const y = Math.round(bottom - s.H + (camY0 - camY) * fx);
-    for (let x = Math.round(ox); x < this.e.W; x += STRIP_W) g.drawImage(s.c, x, y);
+    for (let x = Math.round(ox); x < this.e.W; x += STRIP_W) {
+      g.drawImage(s.c, x, y);
+      if (extendUp && y > 0) g.drawImage(s.c, 0, 0, STRIP_W, 1, x, 0, STRIP_W, y);
+    }
     return y;
   }
 
@@ -104,7 +108,7 @@ export class Renderer {
     this.haze(g, d.haze, 0.3);
     this.strip(g, this.strips.mid, camX, camY0, camY, gs0 - 10);
     this.haze(g, d.haze, 0.16);
-    this.strip(g, this.strips.near, camX, camY0, camY, gs0 - 6);
+    this.strip(g, this.strips.near, camX, camY0, camY, gs0 - 6, undefined, true);
     this.haze(g, d.haze, 0.05);
 
     // ── world ──
@@ -238,7 +242,7 @@ export class Renderer {
   backProps(g, f, camX, camY, vis, t) {
     const P = this.props;
     for (const st of STATIONS) {
-      if (!vis(st.x, 140)) continue;
+      if (!vis(st.x, 240)) continue;
       switch (st.kind) {
         case 'elder': this.elderTree(g, P.elder, st.x, camX, camY, t); break;
         case 'gate': this.propAt(g, f.gateOpen ? P.gateOpen : P.gate, st.x, camX, camY, 2); break;
@@ -354,6 +358,7 @@ export class Renderer {
   // movement stay smooth; it gets the same colour grade as the pixel world.
   // Colour-grades whatever is drawn on `mask` exactly like the world canvas, cut to its silhouette.
   gradeLayer(out, mask, w, h, d) {
+    w = out.canvas.width; h = out.canvas.height;
     out.setTransform(1, 0, 0, 1, 0, 0);
     out.globalCompositeOperation = 'source-over';
     out.globalAlpha = 1;
@@ -377,12 +382,13 @@ export class Renderer {
   drawActor(dg, scale, f) {
     this.treeFx(dg, scale, f);
     const BW = 72, BH = 72, OX = 36, OY = 56;
-    const w = BW * scale, h = BH * scale;
-    if (!this.actor || this.actor.width !== w || this.actor.height !== h) { this.actor = makeCanvas(w, h); this.actorMask = makeCanvas(w, h); }
+    // buffers only grow, so a zoom transition (fractional scale every frame) never reallocates
+    const w = Math.ceil(BW * scale), h = Math.ceil(BH * scale);
+    if (!this.actor || this.actor.width < w || this.actor.height < h) { this.actor = makeCanvas(w + 32, h + 32); this.actorMask = makeCanvas(w + 32, h + 32); }
     const mg = this.actorMask.getContext('2d'), ag = this.actor.getContext('2d');
     const p = f.player, axe = AXE_BY_ID[f.equipped];
     mg.setTransform(1, 0, 0, 1, 0, 0);
-    mg.clearRect(0, 0, w, h);
+    mg.clearRect(0, 0, this.actorMask.width, this.actorMask.height);
     mg.setTransform(scale, 0, 0, scale, 0, 0);
     mg.imageSmoothingEnabled = false;
     drawHero(mg, OX, OY, p.facing, p.pose, axe);
@@ -399,12 +405,12 @@ export class Renderer {
     const c = this.camRounded, W = this.e.W;
     const list = f.trees.list.filter((tr) => (tr.state === 'falling' || (tr.state === 'growing' && tr.growT >= GROW.sprout)) && tr.x > c.x - 160 && tr.x < c.x + W + 160);
     if (!list.length) return;
-    const w = W * scale, h = this.e.H * scale;
-    if (!this.fx || this.fx.width !== w || this.fx.height !== h) { this.fx = makeCanvas(w, h); this.fxMask = makeCanvas(w, h); }
+    const w = Math.ceil(W * scale), h = Math.ceil(this.e.H * scale);
+    if (!this.fx || this.fx.width < w || this.fx.height < h) { this.fx = makeCanvas(w, h); this.fxMask = makeCanvas(w, h); }
     const mg = this.fxMask.getContext('2d');
     mg.setTransform(1, 0, 0, 1, 0, 0);
     mg.globalAlpha = 1;
-    mg.clearRect(0, 0, w, h);
+    mg.clearRect(0, 0, this.fxMask.width, this.fxMask.height);
     mg.imageSmoothingEnabled = false;
     const t = f.time;
     for (const tr of list) {
@@ -536,7 +542,7 @@ export class Renderer {
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
     const elderBoost = f.elderGlow || 0;
     for (const st of STATIONS) {
-      if (st.x < camX - 160 || st.x > camX + this.e.W + 160) continue;
+      if (st.x < camX - 240 || st.x > camX + this.e.W + 240) continue;
       const gy = groundY(st.x);
       if (st.kind === 'trader') glowAt(G.warm, st.x - 44, groundY(st.x - 44) - 6, 80 + Math.sin(t * 9) * 4, 0.45 + night * 0.5);
       else if (st.kind === 'altar') {
@@ -547,7 +553,7 @@ export class Renderer {
         for (const r of this.props.elder.runes) glowAt(G.cyan, st.x + r.x, gy + r.y, 18 + elderBoost * 20, (0.25 + pulse * 0.25) * (1 + elderBoost * 2));
         glowAt(G.green, st.x, gy - 16, 50 + elderBoost * 60, 0.15 + elderBoost * 0.5);
         // a soft glow in the crown, stronger at night
-        glowAt(G.green, st.x, gy - 140, 120 + elderBoost * 40, 0.08 + night * 0.12 + elderBoost * 0.2);
+        glowAt(G.green, st.x, gy - 230, 200 + elderBoost * 60, 0.08 + night * 0.12 + elderBoost * 0.25);
       } else if (st.kind === 'gate') glowAt(G.gold, st.x, gy - 50, f.gateOpen ? 110 : 70, (f.gateOpen ? 0.6 : 0.35) + (1 - night) * 0.2);
       else if (st.kind === 'sundial') glowAt(G.gold, st.x, gy - 30, 40 + pulse * 12, 0.45 + pulse * 0.2);
     }

@@ -3,6 +3,8 @@
 import { makeCanvas } from '../gfx/PixBuf.js';
 
 export const BASE_H = 270;
+// lowest camera zoom (used to frame large landmarks); buffers are sized for it up front
+export const ZOOM_MIN = 0.45;
 
 export class Engine {
   constructor(display) {
@@ -37,9 +39,11 @@ export class Engine {
     let scale = Math.max(1, Math.round(dh / BASE_H));
     if (dw / scale < 240) scale = Math.max(1, Math.floor(dw / 240));
     this.scale = scale;
-    this.W = Math.ceil(dw / this.scale);
-    this.H = Math.ceil(dh / this.scale);
-    for (const [c, k] of [[this.pix, 1], [this.light, 2], [this.ui, 1]]) { c.width = this.W * k; c.height = this.H * k; }
+    this.W0 = Math.ceil(dw / this.scale);
+    this.H0 = Math.ceil(dh / this.scale);
+    const mw = Math.ceil(this.W0 / ZOOM_MIN), mh = Math.ceil(this.H0 / ZOOM_MIN);
+    for (const [c, k] of [[this.pix, 1], [this.light, 2], [this.ui, 1]]) { c.width = mw * k; c.height = mh * k; }
+    this.setZoom(this.zoom || 1);
     for (const g of [this.pg, this.ug, this.dg]) g.imageSmoothingEnabled = false;
     this.cssScale = this.scale / dpr; // art pixels → CSS pixels
     document.documentElement.style.setProperty('--view-h', ch + 'px');
@@ -47,24 +51,33 @@ export class Engine {
     this.onResize?.();
   }
 
+  // Camera zoom: below 1 the world is drawn into a larger virtual view (W × H art pixels, top-left
+  // of each buffer) and shrunk onto the display, so more of the scene fits on screen.
+  setZoom(z) {
+    this.zoom = Math.max(ZOOM_MIN, Math.min(1, z));
+    this.W = Math.round(this.W0 / this.zoom);
+    this.H = Math.round(this.H0 / this.zoom);
+    this.vscale = this.scale * this.W0 / this.W; // display pixels per art pixel right now
+  }
+
   // Composites the three layers onto the display.
   // actor: draws hi-res sprites (the hero) between the pixel world and the light.
   present(lightAlpha = 1, actor = null) {
-    const g = this.dg, s = this.scale;
+    const g = this.dg, s = this.vscale, W = this.W, H = this.H, dw = W * s, dh = H * s;
     g.globalCompositeOperation = 'source-over';
     g.imageSmoothingEnabled = false;
-    g.drawImage(this.pix, 0, 0, this.W * s, this.H * s);
+    g.drawImage(this.pix, 0, 0, W, H, 0, 0, dw, dh);
     if (actor) actor(g, s);
     if (lightAlpha > 0) {
       g.imageSmoothingEnabled = true;
       g.globalCompositeOperation = 'screen';
       g.globalAlpha = lightAlpha;
-      g.drawImage(this.light, 0, 0, this.W * s, this.H * s);
+      g.drawImage(this.light, 0, 0, W * 2, H * 2, 0, 0, dw, dh);
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
       g.imageSmoothingEnabled = false;
     }
-    g.drawImage(this.ui, 0, 0, this.W * s, this.H * s);
+    g.drawImage(this.ui, 0, 0, W, H, 0, 0, dw, dh);
   }
 
   start(update) {
