@@ -6,12 +6,14 @@ import { FLAVORS } from '../../shared/flavors.js';
 import { FACES } from '../../shared/faces.js';
 import { rand, pick, TAU } from '../core/math.js';
 import { sfx, music } from '../core/audio.js';
+import { makeLogo } from '../render/logo.js';
 
 export class TitleScene {
   constructor(app) { this.app = app; this.t = 0; this.floaters = []; }
   enter() {
     for (let i = 0; i < 14; i++) this.floaters.push(this.makeFloater(true));
-    this.app.ui.set('logo', h(`<div class="logo"><div class="k">글래시온 왕국</div><div class="t">녹지 마,<br>아이스크림!</div></div>`));
+    const logo = this.app.ui.set('logo', h('<div class="logo"><canvas aria-label="MELTDOWN — Last Scoop Standing"></canvas></div>'));
+    makeLogo(logo.querySelector('canvas'));
     music('menu');
     if (this.app.profile.signedIn) this.welcome();
     else this.authForm('login');
