@@ -8,7 +8,7 @@
 ## 바로 플레이
 
 - **온라인 (로그인, 광장, 멀티)**: https://glacion-icecream.celesta.workers.dev/
-- GitHub Pages: https://lhc6835-hue.github.io/Glacion-kingdom/ (같은 서버에 접속)
+- GitHub Pages: https://lhc6835-hue.github.io/Glacion-kingdom/ (`tools/deploy-pages.sh`로 올리면 같은 서버에 접속해요. 아직은 예전 게임이 올라가 있어요)
 
 ## 게임 구성
 
