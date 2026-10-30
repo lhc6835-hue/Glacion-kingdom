@@ -196,3 +196,12 @@ input { font-family: var(--font); }
 .chatbar input { flex: 1; border: 3px solid #ffd6e4; border-radius: 14px; padding: 8px 12px; font-size: 16px; outline: none; }
 .emotes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .emotes button { background: #fff4f8; border-radius: 999px; padding: 5px 10px; font-size: 14px; color: var(--ink); }
+.card.auth { max-width: 380px; animation: pop .4s cubic-bezier(.3,1.6,.5,1); }
+.lobby { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+@media (max-width: 640px) { .lobby { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.seat { background: #fff; border-radius: 18px; padding: 8px; text-align: center; display: flex; flex-direction: column; align-items: center; min-height: 170px; justify-content: center; }
+.seat.empty { background: rgba(255,255,255,0.5); border: 3px dashed #ffd6e4; }
+.seat .nm { font-size: 15px; }
+.code { font-size: 22px; letter-spacing: 3px; color: var(--pink); font-weight: normal; user-select: text; -webkit-user-select: text; }
+@media (max-height: 760px) { .logo { top: 3vh; } .logo .t { font-size: clamp(36px, 8vh, 64px); } .title-wrap { padding-bottom: 3vh; } }
+@media (max-height: 560px) { .logo { display: none; } }

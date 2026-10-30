@@ -7,6 +7,8 @@ import { drawEnemyFrame, glowOf } from '../render/enemyArt.js';
 import { sfx } from '../core/audio.js';
 
 let nextId = 1;
+// set by the arena on co-op guests so crowd-control from local traits reaches the host
+export const NET = { cc: null };
 
 export class Enemy {
   constructor(type, x, y, { hpMul = 1, dmgMul = 1, elite = false } = {}) {
@@ -38,9 +40,9 @@ export class Enemy {
   get frozen() { return this.freezeT > 0; }
   get disabled() { return this.freezeT > 0 || this.stunT > 0; }
 
-  applySlow(amt, dur) { if (amt >= this.slowAmt || this.slowT <= 0) { this.slowAmt = amt; } this.slowT = Math.max(this.slowT, dur); }
-  freeze(dur) { if (this.d.boss) dur *= 0.3; this.freezeT = Math.max(this.freezeT, dur); }
-  stun(dur) { if (this.d.boss) dur *= 0.3; this.stunT = Math.max(this.stunT, dur); }
+  applySlow(amt, dur, net) { if (amt >= this.slowAmt || this.slowT <= 0) { this.slowAmt = amt; } this.slowT = Math.max(this.slowT, dur); if (NET.cc && !net && dur > 0.4) NET.cc(this, 'slow', amt, dur); }
+  freeze(dur, net) { if (this.d.boss) dur *= 0.3; this.freezeT = Math.max(this.freezeT, dur); if (NET.cc && !net) NET.cc(this, 'freeze', dur); }
+  stun(dur, net) { if (this.d.boss) dur *= 0.3; this.stunT = Math.max(this.stunT, dur); if (NET.cc && !net) NET.cc(this, 'stun', dur); }
   knock(dx, dy, f) {
     const d = Math.hypot(dx, dy) || 1;
     const res = this.d.boss ? 0.08 : this.d.heavy ? 0.35 : 1;
@@ -59,16 +61,25 @@ export class Enemy {
     const kd = Math.exp(-9 * dt);
     this.kx *= kd; this.ky *= kd;
     let mx = 0, my = 0;
-    if (!this.disabled && this.spawnT <= 0) {
+    if (this.net) {
+      // co-op guest: glide toward the host's position for this enemy
+      const f = Math.min(1, dt * 10);
+      const dx = (this.net.x - this.x) * f, dy = (this.net.y - this.y) * f;
+      this.x += dx; this.y += dy;
+      this.vx = dx / Math.max(dt, 1e-3);
+      this.kx = this.ky = 0;
+    } else if (!this.disabled && this.spawnT <= 0) {
       const tgt = A.targetFor(this);
       const sp = this.spd * (1 - this.slowAmt);
       const r = AI[this.d.ai](this, A, tgt, dt, sp);
       if (r) { mx = r[0]; my = r[1]; }
     }
-    this.vx = mx; this.vy = my;
-    this.x += (mx + this.kx) * dt;
-    this.y += (my + this.ky) * dt;
-    A.keepInside(this);
+    if (!this.net) {
+      this.vx = mx; this.vy = my;
+      this.x += (mx + this.kx) * dt;
+      this.y += (my + this.ky) * dt;
+      A.keepInside(this);
+    }
 
     // contact damage
     if (!this.disabled && this.spawnT <= 0 && this.d.ai !== 'bomber') {
@@ -223,7 +234,7 @@ const AI = {
       }
       return [vx * 0.2, vy * 0.2];
     }
-    if (d < 70) { s.fuse = 0.7; A.fx.decal({ k: 'warn', x: e.x, y: e.y, r: 95, life: 0.7 }); }
+    if (d < 70) { s.fuse = 0.7; A.warn(e.x, e.y, 95, 0.7); }
     return [vx, vy];
   },
 
@@ -277,7 +288,7 @@ const AI = {
     if (s.t > 3.2 && tgt) {
       s.t = 0;
       s.jump = { t: 0, dur: 1.1, x0: e.x, y0: e.y, x1: tgt.x, y1: tgt.y };
-      A.fx.decal({ k: 'warn', x: tgt.x, y: tgt.y, r: 170, life: 1.1 });
+      A.warn(tgt.x, tgt.y, 170, 1.1);
       e.sq.kick(6);
     }
     return [vx, vy];

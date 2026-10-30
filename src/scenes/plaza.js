@@ -36,7 +36,7 @@ export class PlazaScene {
       { x0: 1940, x1: 2160, y: -62 }, // fountain rim
       { x0: 3010, x1: 3150, y: -46 }, // bench
     ]);
-    this.startX = x ?? 2050 - 260;
+    this.startX = x ?? 2050 - 260 + rand(-160, 160);
     this.others = new Map();
     this.npcs = [];
     this.splash = [];

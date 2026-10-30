@@ -7,6 +7,7 @@ import { TitleScene } from './scenes/title.js';
 import { PlazaScene } from './scenes/plaza.js';
 import { ShopScene } from './scenes/shop.js';
 import { Profile } from './core/profile.js';
+import { Net } from './net/net.js';
 
 class App {
   constructor() {
@@ -15,6 +16,7 @@ class App {
     this.input = new Input(this.canvas);
     this.ui = new UI(document.getElementById('ui'));
     this.profile = new Profile();
+    this.net = new Net(this);
     this.scene = null;
     this.last = performance.now();
     this.resize();
@@ -32,6 +34,7 @@ class App {
   }
 
   goHome(opts) { this.go(new PlazaScene(this, opts)); }
+  async signOut() { await this.net.logout(); this.go(new TitleScene(this)); }
 
   go(scene) {
     if (this.scene && this.scene.exit) this.scene.exit();
@@ -60,6 +63,7 @@ class App {
 const app = new App();
 window.__app = app;
 const q = new URLSearchParams(location.search);
+if (!q.has('offline')) await app.net.restore().catch(() => false);
 if (q.has('play')) app.go(new ArenaScene(app, debugLoadout(q, app.profile)));
 else if (q.has('plaza')) app.goHome();
 else if (q.has('shop')) app.go(new ShopScene(app, +q.get('shop') || 0));

@@ -2,7 +2,7 @@
 // in-canvas HUD. Built so a host can simulate enemies for up to four players (see net/coop.js).
 import { ArenaWorld, HALF, shoreDist, drawProp } from '../render/arenaWorld.js';
 import { Player } from './player.js';
-import { Enemy } from './enemy.js';
+import { Enemy, NET } from './enemy.js';
 import { FX } from './fx.js';
 import { drawProjectile } from './weapons.js';
 import { ENEMIES, BOSS_ORDER } from '../data/enemies.js';
@@ -19,7 +19,7 @@ const CELL = 96;
 export class Arena {
   constructor(app, { loadout, levels, name = '나', coop = null, seed = 7 }) {
     this.app = app;
-    this.world = new ArenaWorld(seed);
+    this.world = new ArenaWorld(coop && coop.room.seed ? (coop.room.seed % 1000) + 1 : seed);
     this.fx = new FX();
     this.players = [];
     this.me = new Player({ loadout, levels, name, local: true, id: coop ? coop.myId : undefined });
@@ -46,6 +46,12 @@ export class Arena {
     this.over = false;
     this.banner = null;
     this.boss = null;
+    this.myPicked = false;
+    NET.cc = null;
+    if (coop) {
+      coop.attach(this);
+      if (!this.authority) NET.cc = (e, kind, a, b) => coop.send({ k: 'cc', id: e.id, kind, a, b });
+    }
     music('battle');
   }
 
@@ -214,7 +220,8 @@ export class Arena {
 
   // ── combat ────────────────────────────────────────────────
   addProj(owner, p) { p.owner = owner; p.t = 0; p.hit = p.hit || new Set(); p.z = p.z || 0; this.projs.push(p); return p; }
-  addEnemyProj(p) { p.t = 0; this.eprojs.push(p); }
+  addEnemyProj(p) { p.t = 0; this.eprojs.push(p); if (this.coop && this.authority) this.coop.emitEnemyProj(p); }
+  warn(x, y, r, life) { this.fx.decal({ k: 'warn', x, y, r, life }); if (this.coop && this.authority) this.coop.emitWarn(x, y, r, life); }
   addArea(a) { a.t = 0; a.tickT = 0; this.areas.push(a); }
   shake(a) { this.shakeAmt = Math.min(18, this.shakeAmt + a); }
   hitstop(t) { this.stopT = Math.max(this.stopT, t); }
@@ -223,7 +230,7 @@ export class Arena {
   // Main damage entry: crits, bonuses, knockback, on-hit traits, kill handling.
   hit(p, e, base, o = {}) {
     if (e.dead || !p) return 0;
-    if (!this.authority && this.coop) { this.coop.sendHit(e, base, o); this.localHitFx(e, base, o); return base; }
+    if (!p.local) return 0; // remote players' weapons only animate here; their client sends the damage
     const st = p.stats;
     let dmg = base;
     const crit = o.crit === true || (o.crit !== false && !o.proc && Math.random() < st.crit);
@@ -234,6 +241,7 @@ export class Arena {
     if (o.falloff) dmg *= o.falloff;
     dmg *= rand(0.92, 1.08);
     e.hp -= dmg;
+    if (!this.authority) this.coop.sendHit(e, dmg, o);
     e.flash = 1;
     e.sq.kick(-3.5);
     p.dmgDone += dmg;
@@ -257,15 +265,8 @@ export class Arena {
         }
       }
     }
-    if (e.hp <= 0) this.kill(p, e);
+    if (e.hp <= 0 && this.authority) this.kill(p, e);
     return dmg;
-  }
-
-  localHitFx(e, base, o) {
-    e.flash = 1; e.sq.kick(-3.5);
-    if (o.knock) e.knock(o.kx ?? 0, o.ky ?? 0, o.knock * 0.5);
-    if (!o.quiet || Math.random() < 0.35) this.fx.num(e.x, e.y - e.size, base, false);
-    if (!o.quiet) sfx.hit();
   }
 
   chain(p, e, n, dmg, color) {
@@ -298,6 +299,7 @@ export class Arena {
     this.queryCircle(x, y, r, (e) => this.hit(p, e, dmg, { proc: o.proc, kx: e.x - x, ky: e.y - y, knock: o.knock || 200, stun: o.stun, quiet: o.small }));
   }
   enemyExplode(src, x, y, r, dmg, o = {}) {
+    if (this.coop && this.authority && !o.remote) this.coop.emitExplode(x, y, r, dmg);
     this.fx.ring(x, y, r, '#ff7a4a', { life: 0.4, w: 12, fill: 'rgba(255,120,70,0.3)' });
     this.fx.burst(x, y, 18, { c: ['#ff7a4a', '#ffd25a', '#5a1f33'], sp: 340, r: 5, life: 0.5 });
     this.fx.decal({ k: 'scorch', x, y, r: r * 0.8, life: 5 });
@@ -307,22 +309,24 @@ export class Arena {
     if (!o.noKill) src.dead = true;
   }
 
-  kill(p, e) {
+  kill(p, e, net = null) {
     if (e.dead) return;
     e.dead = true;
     this.kills++;
     p.kills++;
+    const own = p.local;
     sfx.kill();
     const c = { heatdrop: '#ffb347', ember: '#ff6a3d', haze: '#ffc6e2', sunling: '#ffd84a', slime: '#ff6f8a', magma: '#c85a3a', whirl: '#ffcf9e', flare: '#7a2a40' }[e.art] || '#ffffff';
     this.fx.burst(e.x, e.y - e.r * 0.4, 10, { c: [c, '#ffffff'], sp: 260, r: 4, life: 0.5 });
     for (let i = 0; i < 3; i++) this.fx.puff(e.x + rand(-10, 10), e.y - e.r * 0.4, { c: 'rgba(255,255,255,0.55)', r: e.r * 0.6, vz: 40 });
     this.fx.splat(e.x, e.y, c, e.r * 0.9, 3);
     // coins
-    let v = e.d.coin * (1 + this.wave * 0.04) * (e.elite ? 4 : 1);
-    for (const q of p.proc('killCoin')) if (Math.random() < q.chance * q.s) v *= 2;
+    let v = net ? net.coin : e.d.coin * (1 + this.wave * 0.04) * (e.elite ? 4 : 1);
+    if (own) for (const q of p.proc('killCoin')) if (Math.random() < q.chance * q.s) v *= 2;
     this.dropCoins(e.x, e.y, v);
-    if ((e.elite && Math.random() < 0.3) || e.d.boss) this.pickups.push({ k: 'scoop', x: e.x, y: e.y, z: 0, vz: 260, t: 0 });
-    if (e.d.split) for (let i = 0; i < 2; i++) this.spawnEnemy(e.d.split, e.x + rand(-14, 14), e.y + rand(-14, 14));
+    const refill = net ? net.refill : (e.elite && Math.random() < 0.3) || e.d.boss;
+    if (refill) this.pickups.push({ k: 'scoop', x: e.x, y: e.y, z: 0, vz: 260, t: 0 });
+    if (e.d.split && this.authority) for (let i = 0; i < 2; i++) this.spawnEnemy(e.d.split, e.x + rand(-14, 14), e.y + rand(-14, 14));
     if (e.d.boss) {
       this.bossKills++;
       this.boss = null;
@@ -330,6 +334,8 @@ export class Arena {
       this.floatText(e.x, e.y - 100, '보스 처치!', '#ffd35a', true);
       for (let i = 0; i < 40; i++) this.fx.dot(e.x, e.y - 40, { k: 'star', c: ['#ffe27a', '#ffffff', '#ffb3d1'][i % 3], sp: rand(100, 520), r: rand(4, 9), life: rand(0.6, 1.2) });
     }
+    if (this.coop && this.authority) this.coop.onKill(e, p);
+    if (!own) return;
     // on-kill traits
     p.combo++; p.comboT = 1.6;
     for (const q of p.procs) {
@@ -343,7 +349,6 @@ export class Arena {
         case 'comboHaste': p.stats.atk = p.stats.atk - (p.comboBonus || 0); p.comboBonus = Math.min(q.max * q.s, p.combo * q.per * q.s); p.stats.atk += p.comboBonus; break;
       }
     }
-    if (this.coop) this.coop.onKill(e);
   }
 
   dropCoins(x, y, v) {
@@ -409,7 +414,7 @@ export class Arena {
     this.fx.update(dt);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > 2.4) this.banner = null; }
 
-    if (this.authority) this.updateWaves(dt);
+    this.updateWaves(dt);
   }
 
   readControls(input) {
@@ -430,7 +435,8 @@ export class Arena {
       aim = Math.atan2(this.mouseWorld.y - (me.y - 20), this.mouseWorld.x - me.x);
       fire = input.firing();
     }
-    const busy = this.state === 'pick' || this.state === 'over';
+    const busy = (this.state === 'pick' && !this.myPicked && !this.coop) || this.state === 'over' || !this.me.alive;
+    if (this.coop) this.coop.setFire(fire && !busy);
     return { move: busy ? { x: 0, y: 0 } : mv, aim, fire: fire && !busy, firePressed: input.pressed('fire') && !busy, dash: input.pressed('dash') && !busy };
   }
 
@@ -549,7 +555,7 @@ export class Arena {
       if (k.vx) { k.x += k.vx * dt; k.y += k.vy * dt; const d = Math.exp(-4 * dt); k.vx *= d; k.vy *= d; }
       let best = null, bd = Infinity;
       for (const p of this.players) {
-        if (!p.alive) continue;
+        if (!p.alive || (this.coop && !p.local)) continue;
         const d = Math.hypot(p.x - k.x, p.y - k.y);
         if (d < bd) { bd = d; best = p; }
       }
@@ -579,6 +585,10 @@ export class Arena {
   }
 
   updateWaves(dt) {
+    if (!this.authority) {
+      if (this.state === 'clear' && this.stateT > 1.4 && this.pickups.every((k) => k.k !== 'coin')) this.beginPick();
+      return;
+    }
     switch (this.state) {
       case 'intro':
         if (this.stateT > 1.2) this.startWave();
@@ -617,9 +627,9 @@ export class Arena {
     const opts = rollToppings(me, 3);
     this.app.ui.toppingPick(opts, me, (id) => {
       this.applyTopping(me, id);
-      if (this.coop) this.coop.onPicked(id);
-      if (!this.coop || this.coop.isHost) { this.state = 'countdown'; this.stateT = 0; }
-      else this.state = 'waitHost';
+      this.myPicked = true;
+      if (this.coop) { this.coop.onPicked(id); if (this.state === 'pick') this.state = this.authority ? 'waitAll' : 'waitHost'; }
+      else { this.state = 'countdown'; this.stateT = 0; }
     });
   }
   applyTopping(p, id) {
@@ -728,7 +738,7 @@ export class Arena {
     const label = this.wave ? `웨이브 ${this.wave}` : '준비';
     g.strokeText(label, W / 2, safeTop + 22); g.fillStyle = '#ffffff'; g.fillText(label, W / 2, safeTop + 22);
     if (this.state === 'fight') {
-      const left = this.enemies.length + (this.dir && !this.dir.done ? Math.ceil((this.dir.budget - this.dir.spent) / 1.4) : 0);
+      const left = this.enemies.length + (this.authority ? (this.dir && !this.dir.done ? Math.ceil((this.dir.budget - this.dir.spent) / 1.4) : 0) : this.queued || 0);
       g.font = '15px Jua'; g.fillStyle = 'rgba(255,255,255,0.9)';
       g.strokeText(`남은 적 ${left}`, W / 2, safeTop + 44); g.fillText(`남은 적 ${left}`, W / 2, safeTop + 44);
     }
