@@ -26,6 +26,26 @@ function costHtml(state, cost) {
   }).join(' ');
 }
 
+// Small line icons for the HUD and panel headers (inline SVG, drawn in currentColor).
+const SVG = {
+  bag: '<path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M4.5 8h15l-1.3 12.2a1 1 0 0 1-1 .8H6.8a1 1 0 0 1-1-.8z"/><path d="M9 12h6"/>',
+  book: '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M7 8h2M15 8h2"/>',
+  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+  moon: '<path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/>',
+  leaf: '<path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z"/><path d="M5 19l8-8"/>',
+  shield: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>',
+  tent: '<path d="M3 20L12 4l9 16z"/><path d="M12 4v16M9 20l3-6 3 6"/>',
+  altar: '<path d="M4 20h16M6 20V9M18 20V9M3 9h18M8 5h8l1 4H7z"/><path d="M12 12l1.5 2.5L12 17l-1.5-2.5z"/>',
+  guild: '<path d="M4 4h16v12H4z"/><path d="M7 8h4M7 11h6M14 8h3v3h-3zM8 16v4M16 16v4"/>',
+  mill: '<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3L6.3 17.7"/><circle cx="12" cy="12" r="2"/>',
+};
+const icon = (k, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
+const PANEL_META = {
+  trader: ['tent', 'Wandering Merchant'], altar: ['altar', 'Altar of Axes'], guild: ['guild', "Woodcutters' Guild"],
+  sawmill: ['mill', 'Waterwheel Mill'], bag: ['bag', 'Satchel'], codex: ['book', 'Field Codex'], settings: ['gear', 'Settings'],
+};
+
 function gradeTag(g) { const gr = GRADES[g]; return `<span class="grade" style="--gc:${gr.color}">${gr.ko}</span>`; }
 
 export class UI {
@@ -60,7 +80,11 @@ export class UI {
         <div class="res" id="res"></div>
         <div class="objective" id="objective"></div>
         <div class="topright"><div class="region" id="region"></div>
-          <div class="btns"><button data-act="open" data-arg="bag">가방 <kbd>I</kbd></button><button data-act="open" data-arg="codex">도감 <kbd>C</kbd></button><button data-act="open" data-arg="settings">설정 <kbd>Esc</kbd></button></div>
+          <div class="btns">
+            <button class="ibtn" data-act="open" data-arg="bag" aria-label="가방">${icon('bag')}<span>가방</span><kbd>I</kbd></button>
+            <button class="ibtn" data-act="open" data-arg="codex" aria-label="도감">${icon('book')}<span>도감</span><kbd>C</kbd></button>
+            <button class="ibtn" data-act="open" data-arg="settings" aria-label="설정">${icon('gear')}<span>설정</span><kbd>Esc</kbd></button>
+          </div>
         </div>
         <div class="target hidden" id="target"></div>
         <div class="equip" id="equip"></div>
@@ -143,17 +167,21 @@ export class UI {
     if (this.hudT > 0) return;
     dt = 0.08 - this.hudT; this.hudT = 0.08;
     const g = this.g, s = g.state;
-    const res = `${ico(itemIcon('gold'))}<b>${fmt(s.gold)}</b>${ico(itemIcon('essence'))}<b>${fmt(s.essence)}</b>${ico(itemIcon('shards'))}<b>${fmt(s.shards)}</b>`;
+    const res = `<span class="cur gold" title="골드">${ico(itemIcon('gold'))}<b>${fmt(s.gold)}</b></span><span class="cur ess" title="정수">${ico(itemIcon('essence'))}<b>${fmt(s.essence)}</b></span><span class="cur shard" title="도끼 파편">${ico(itemIcon('shards'))}<b>${fmt(s.shards)}</b></span>`;
     if (res !== this.lastRes) { this.$('res').innerHTML = res; this.lastRes = res; }
-    const region = `상록 계곡 <span>· ${g.day.cur.phase} ${g.day.label()}</span>`;
+    const region = `${icon(g.day.isDay ? 'sun' : 'moon', g.day.isDay ? 'sun' : 'moon')}<div><b>상록 계곡</b><span>${g.day.cur.phase} · ${g.day.label()}</span></div>`;
     if (region !== this.lastRegion) { this.$('region').innerHTML = region; this.lastRegion = region; }
     const axe = AXE_BY_ID[s.equipped], cls = CLASS_BY_ID[s.classes.active];
     const cd = g.combat.cooldownLeft(g.now);
-    const eq = `<div class="eq-axe">${ico(axeIcon(axe.id), 'big')}<div><div class="eq-name" style="color:${GRADES[axe.grade].color}">${esc(axe.ko)} ${'★'.repeat(s.axes[axe.id].stars)}</div><div class="eq-sub">${GRADES[axe.grade].ko} · 공격력 ${axeDamage(axe.id, s.axes[axe.id].stars).toFixed(1)}</div></div></div>
-      <div class="eq-cls"><span style="color:${cls.color}">${esc(cls.ko)}</span><button class="skill ${cd > 0 ? 'cd' : ''}" data-act="skill"><kbd>Q</kbd> ${esc(cls.active.ko)}${cd > 0 ? ` <i>${Math.ceil(cd)}</i>` : ''}</button></div>`;
+    const gc = GRADES[axe.grade].color, cdK = cd > 0 ? cd / cls.active.cd : 0;
+    const eq = `<div class="eq-slot" style="--gc:${gc}">${ico(axeIcon(axe.id))}</div>
+      <div class="eq-info"><div class="eq-name" style="color:${gc}">${esc(axe.ko)}${s.axes[axe.id].stars ? ` <i class="stars">${'★'.repeat(s.axes[axe.id].stars)}</i>` : ''}</div>
+        <div class="eq-sub"><span class="grade" style="--gc:${gc}">${GRADES[axe.grade].ko}</span> 공격력 ${axeDamage(axe.id, s.axes[axe.id].stars).toFixed(1)}</div>
+        <div class="eq-cls" style="--cc:${cls.color}">${esc(cls.ko)}</div></div>
+      <button class="skill ${cd > 0 ? 'cd' : 'ready'}" data-act="skill" style="--cd:${cdK.toFixed(3)};--cc:${cls.color}" title="${esc(cls.active.ko)} — ${esc(cls.active.desc)}"><span>${cd > 0 ? Math.ceil(cd) : 'Q'}</span><small>${esc(cls.active.ko)}</small></button>`;
     if (eq !== this.lastEq) { this.$('equip').innerHTML = eq; this.lastEq = eq; }
     const obj = g.objective();
-    if (obj !== this.lastObj) { this.$('objective').innerHTML = obj ? `<span>목표</span> ${obj}` : ''; this.$('objective').classList.toggle('hidden', !obj); this.lastObj = obj; }
+    if (obj !== this.lastObj) { this.$('objective').innerHTML = obj ? `<span class="obj-tag">${icon('leaf')}목표</span><span class="obj-text">${obj}</span>` : ''; this.$('objective').classList.toggle('hidden', !obj); this.lastObj = obj; }
     // target info
     const tr = g.combat.target;
     const tEl = this.$('target');
@@ -163,7 +191,9 @@ export class UI {
       if (tr.burn) st.push('<i class="st burn">화상</i>');
       if (tr.frost && tr.frost.until > g.now) st.push('<i class="st frost">빙결</i>');
       if (tr.poison.length) st.push(`<i class="st poison">독 ×${tr.poison.length}</i>`);
-      const html = `<b>${esc(d.ko)}</b> <small>${esc(d.en)}</small> <span class="hp">${fmt(tr.hp)} / ${fmt(tr.maxHp)}</span> <span class="def">방어 ${g.trees.def(tr, g.now)}</span> ${st.join('')}`;
+      const k = tr.hp / tr.maxHp;
+      const html = `<div class="t-row"><b>${esc(d.ko)}</b><small>${esc(d.en)}</small><span class="def">${icon('shield')}${g.trees.def(tr, g.now)}</span>${st.join('')}</div>
+        <div class="t-hp"><i style="width:${(k * 100).toFixed(1)}%"></i><span>${fmt(tr.hp)} / ${fmt(tr.maxHp)}</span></div>`;
       if (html !== this.lastTarget) { tEl.innerHTML = html; this.lastTarget = html; }
       tEl.classList.remove('hidden');
     } else tEl.classList.add('hidden');
@@ -215,7 +245,8 @@ export class UI {
   head(title, sub, tabs) {
     const cur = this.tab[this.panel] || tabs?.[0]?.[0];
     const tb = tabs ? `<div class="tabs">${tabs.map(([id, label]) => `<button class="${id === cur ? 'on' : ''}" data-act="tab" data-arg="${id}">${label}</button>`).join('')}</div>` : '';
-    return `<div class="head"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><button class="x" data-act="close">✕</button></div>${tb}`;
+    const [ic, en] = PANEL_META[this.panel] || ['leaf', ''];
+    return `<div class="head"><div class="head-emblem">${icon(ic)}</div><div class="head-text"><small>${en}</small><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><button class="x" data-act="close" aria-label="닫기">✕</button></div>${tb}`;
   }
 
   curTab(def) { return this.tab[this.panel] || def; }
